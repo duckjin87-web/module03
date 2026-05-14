@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CosmeDB — 소싱 검색엔진 v5</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ══ 변수 ══ */
+:root{
+  --bg:#f0f3f8;--s1:#fff;--s2:#f5f7fb;--s3:#e8ecf4;
+  --bd:#d4dcea;--bd2:#b8c4d8;
+  --txt:#1a2440;--txt2:#4a5e7a;--txt3:#8a9bb8;
+  --acc:#c8102e;--acc2:#a00c24;
+  --grn:#0a9050;--yel:#c07800;--org:#c06010;
+  --pur:#5040a0;--cyn:#0080a0;--red:#c01020;
+  --navy:#1a2440;
+  --mono:'IBM Plex Mono',monospace;
+  --r:8px;--r2:12px;
+  --topbar:58px;--panel:420px;--fp:256px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:'Noto Sans KR',sans-serif;font-size:13px;line-height:1.6;overflow:hidden;height:100vh}
+button{cursor:pointer;font-family:inherit}
+input,select,textarea{font-family:inherit;outline:none}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px}
+
+/* ══ 상단 검색바 ══ */
+.topbar{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  height:var(--topbar);background:var(--navy);
+  border-bottom:3px solid var(--acc);
+  display:flex;align-items:center;gap:10px;padding:0 16px;
+}
+.brand{display:flex;flex-direction:column;flex-shrink:0;border-right:1px solid rgba(255,255,255,.15);padding-right:14px;margin-right:4px}
+.brand-name{font-family:var(--mono);font-size:15px;font-weight:700;color:#fff;letter-spacing:1px}
+.brand-sub{font-size:8px;color:rgba(255,255,255,.35);letter-spacing:.3px;margin-top:1px}
+.srch-form{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
+.srch-inp{flex:1;height:36px;padding:0 12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--r);color:#fff;font-size:13px;transition:border-color .15s;min-width:0}
+.srch-inp::placeholder{color:rgba(255,255,255,.35)}
+.srch-inp:focus{border-color:var(--acc);background:rgba(255,255,255,.15)}
+.srch-inp-url{flex:0 0 220px}
+.f-grp{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.f-lbl{font-size:9px;color:rgba(255,255,255,.35);font-weight:700;text-transform:uppercase;white-space:nowrap}
+.f-sep{width:1px;height:20px;background:rgba(255,255,255,.12);flex-shrink:0}
+.fchip{padding:3px 9px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);background:none;cursor:pointer;transition:.12s;white-space:nowrap}
+.fchip:hover{border-color:rgba(255,255,255,.5);color:#fff}
+.fchip.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.run-btn{height:36px;padding:0 18px;background:var(--acc);border:none;border-radius:var(--r);color:#fff;font-size:13px;font-weight:900;display:flex;align-items:center;gap:6px;flex-shrink:0;transition:background .15s}
+.run-btn:hover{background:var(--acc2)}
+.fp-toggle{height:36px;padding:0 12px;border:1px solid rgba(255,255,255,.25);border-radius:var(--r);color:rgba(255,255,255,.8);background:rgba(255,255,255,.08);font-size:11px;font-weight:700;flex-shrink:0;transition:.12s;white-space:nowrap}
+.fp-toggle:hover{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.5);color:#fff}
+.fp-toggle.active{background:var(--acc);border-color:var(--acc);color:#fff}
+.hist-chips{display:flex;gap:4px;flex-shrink:0}
+.hchip{padding:2px 8px;border-radius:10px;font-size:9.5px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.55);cursor:pointer;white-space:nowrap}
+.hchip:hover{background:rgba(255,255,255,.15);color:#fff}
+
+/* ══ 필터 패널 (좌측 슬라이드) ══ */
+.fp{
+  position:fixed;top:var(--topbar);left:0;bottom:0;
+  width:var(--fp);background:var(--s1);
+  border-right:2px solid var(--acc);
+  transform:translateX(calc(-1 * var(--fp)));
+  transition:transform .25s cubic-bezier(.4,0,.2,1);
+  z-index:150;display:flex;flex-direction:column;
+  box-shadow:4px 0 20px rgba(26,36,64,.1);
+}
+.fp.open{transform:translateX(0)}
+.fp-hd{padding:9px 12px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.fp-hd-ttl{font-size:11px;font-weight:700;letter-spacing:.3px}
+.fp-close-btn{background:rgba(255,255,255,.15);border:none;color:#fff;padding:2px 7px;border-radius:4px;font-size:9.5px;cursor:pointer}
+.fp-body{flex:1;overflow-y:auto;padding:10px}
+.fp-sec{margin-bottom:13px}
+.fp-sec-hd{font-size:9px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.4px;padding-bottom:5px;border-bottom:1px solid var(--bd);margin-bottom:7px}
+/* 카테고리 그리드 */
+.cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:5px}
+.cat-btn{padding:6px 4px;border-radius:6px;font-size:9px;font-weight:700;border:1px solid var(--bd2);color:var(--txt2);background:var(--s2);cursor:pointer;text-align:center;line-height:1.4;transition:.12s}
+.cat-btn:hover{border-color:var(--acc);color:var(--acc)}
+.cat-btn.active{background:var(--acc);color:#fff;border-color:var(--acc)}
+.sub-wrap{background:var(--s2);border-radius:6px;padding:7px;border:1px solid var(--bd);display:none;margin-bottom:5px}
+.sub-wrap.show{display:block}
+.sub-wrap-hd{font-size:8.5px;color:var(--txt3);margin-bottom:5px;font-weight:700}
+.sub-chips{display:flex;flex-wrap:wrap;gap:3px}
+.sub-chip{padding:2px 7px;border-radius:10px;font-size:9px;border:1px solid var(--bd2);color:var(--txt2);background:var(--s1);cursor:pointer;transition:.1s;white-space:nowrap}
+.sub-chip:hover{border-color:var(--acc);color:var(--acc)}
+.sub-chip.sel{background:var(--acc);color:#fff;border-color:var(--acc)}
+/* 슬라이더 */
+.fp-slider-row{margin-bottom:8px}
+.fp-slider-lbl{display:flex;justify-content:space-between;font-size:9.5px;color:var(--txt2);margin-bottom:3px}
+.fp-slider-val{font-family:var(--mono);color:var(--acc);font-weight:700;font-size:9.5px}
+.fp-range{width:100%;height:4px;accent-color:var(--acc);cursor:pointer}
+/* 칩 필터 */
+.fp-chips{display:flex;flex-wrap:wrap;gap:3px}
+.fp-chip{padding:2px 7px;border-radius:4px;font-size:9.5px;font-weight:600;border:1px solid var(--bd2);color:var(--txt2);background:var(--s2);cursor:pointer;transition:.1s}
+.fp-chip:hover{border-color:var(--acc);color:var(--acc)}
+.fp-chip.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+/* API 키 입력 */
+.api-key-wrap{padding:8px 10px;background:var(--s2);border-top:1px solid var(--bd);flex-shrink:0}
+.api-key-lbl{font-size:8.5px;color:var(--txt3);margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.api-key-inp{width:100%;padding:4px 7px;font-size:9.5px;background:var(--s1);border:1px solid var(--bd2);border-radius:4px;color:var(--txt);font-family:var(--mono)}
+.api-key-inp:focus{border-color:var(--cyn)}
+.api-status{font-size:8px;margin-top:3px}
+
+/* ══ 메인 3열 레이아웃 ══ */
+.main{
+  position:fixed;top:var(--topbar);left:0;right:0;bottom:0;
+  display:grid;grid-template-columns:1fr 1fr 1fr;
+  transition:right .25s ease,left .25s ease;
+}
+.main.panel-open{right:var(--panel)}
+.main.fp-open{left:var(--fp)}
+
+/* ══ 열 공통 ══ */
+.col{display:flex;flex-direction:column;border-right:1px solid var(--bd);overflow:hidden}
+.col:last-child{border-right:none}
+.col-head{padding:9px 14px;background:var(--s1);border-bottom:2px solid var(--bd);flex-shrink:0;display:flex;align-items:center;gap:7px}
+.col-title{font-size:12px;font-weight:800;flex:1}
+.col-cnt{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px}
+.c1 .col-cnt{background:#e8f4ff;color:var(--cyn)}
+.c2 .col-cnt{background:#e8f8f0;color:var(--grn)}
+.c3 .col-cnt{background:#f0eeff;color:var(--pur)}
+.col-sub{font-size:9px;color:var(--txt3)}
+.col-body{flex:1;overflow-y:auto}
+.col-toolbar{padding:5px 10px;background:var(--s2);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:5px;flex-wrap:wrap;flex-shrink:0}
+.tbtn{padding:2px 8px;border-radius:4px;font-size:9.5px;font-weight:600;border:1px solid var(--bd2);color:var(--txt2);background:var(--s3);cursor:pointer}
+.tbtn:hover{border-color:var(--acc);color:var(--acc)}
+.tbtn.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+.tbtn.pur{background:var(--pur);color:#fff;border-color:var(--pur)}
+.tbtn.grn{background:var(--grn);color:#fff;border-color:var(--grn)}
+.tbtn.cyn{background:var(--cyn);color:#fff;border-color:var(--cyn)}
+.tbtn:disabled{opacity:.4;cursor:not-allowed}
+.tb-info{font-size:9.5px;color:var(--txt3);flex:1}
+
+/* 빈 상태 */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;padding:30px;text-align:center;color:var(--txt3)}
+.ei{font-size:36px;margin-bottom:10px;opacity:.6}
+.et{font-size:12px;font-weight:700;color:var(--txt2);margin-bottom:5px}
+.es{font-size:10.5px;line-height:1.8}
+
+/* ══ Col1 카드 ══ */
+.db-card{padding:10px 12px;border-bottom:1px solid var(--bd);cursor:pointer;transition:background .1s;position:relative}
+.db-card:hover{background:var(--s2)}
+.db-card.active{background:#fff0f2;border-left:3px solid var(--acc)}
+.db-card-head{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.db-name{font-size:11.5px;font-weight:700;flex:1;line-height:1.3}
+.db-meta{font-size:9.5px;color:var(--txt2);margin-bottom:4px;display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.db-tags{display:flex;flex-wrap:wrap;gap:2px;margin-bottom:4px}
+.db-bar{height:3px;background:var(--s3);border-radius:2px;overflow:hidden;margin-bottom:3px}
+.db-bar-f{height:100%;border-radius:2px;transition:width .6s}
+.db-foot{display:flex;justify-content:space-between;font-size:9px;color:var(--txt3)}
+.eq-hit{font-size:8.5px;color:var(--cyn);background:rgba(0,128,160,.08);padding:1px 5px;border-radius:3px;border:1px solid rgba(0,128,160,.2)}
+.db-equip-list{font-size:9px;color:var(--acc);margin-bottom:3px}
+.db-warn{margin:8px 10px;padding:6px 10px;background:#fff8e8;border:1px solid #e8c060;border-radius:var(--r);font-size:10px;color:var(--yel);display:none;align-items:center;gap:6px;flex-wrap:wrap}
+.db-warn.show{display:flex}
+
+/* ══ Col2 카드 ══ */
+.prod-card{padding:10px 12px;border-bottom:1px solid var(--bd)}
+.prod-rank{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--bd2);min-width:20px;flex-shrink:0}
+.prod-rank.top3{color:var(--acc)}
+.prod-name{font-size:11.5px;font-weight:700;margin-bottom:2px}
+.prod-brand{font-size:9.5px;color:var(--txt2);margin-bottom:3px}
+.prod-mfr{font-size:10.5px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:4px}
+.mfr-h{color:var(--grn);font-weight:700}.mfr-m{color:var(--yel);font-weight:700}.mfr-l{color:var(--txt3)}
+.prod-src{font-size:9px;color:var(--txt3);display:flex;align-items:center;gap:4px;margin-bottom:4px}
+.prod-src a{color:var(--cyn)}
+.prod-actions{display:flex;gap:4px;flex-wrap:wrap}
+.pb{padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700;border:1px solid;cursor:pointer}
+.pb-db{border-color:var(--grn);color:var(--grn);background:#e8f8f0}
+.pb-add{border-color:var(--acc);color:var(--acc);background:#fff0f2}
+.pb-src{border-color:var(--bd2);color:var(--txt2);background:var(--s3)}
+.conf-b{font-size:8px;padding:1px 5px;border-radius:3px;font-weight:700;font-family:var(--mono)}
+.ch{background:#e8f8f0;color:var(--grn);border:1px solid #90d8b0}
+.cm{background:#fdf4e0;color:var(--yel);border:1px solid #e0c060}
+.cl{background:var(--s3);color:var(--txt3);border:1px solid var(--bd)}
+.src-b{font-size:8px;padding:1px 4px;border-radius:3px;font-weight:600}
+.src-blog{background:#e8f8f0;color:var(--grn)}
+.src-page{background:#e8f0ff;color:#1848c0}
+.src-shop{background:#fff4e0;color:var(--yel)}
+.src-mfds{background:#f0eeff;color:var(--pur)}
+
+/* ══ Col3 Scout ══ */
+.scout-sec-hd{padding:6px 12px;font-size:9.5px;font-weight:700;letter-spacing:.4px;border-bottom:1px solid var(--bd)}
+.scout-card{padding:10px 12px;border-bottom:1px solid var(--bd)}
+.sc-head{display:flex;gap:7px;margin-bottom:6px;align-items:flex-start}
+.sc-rank{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--bd2);min-width:26px;flex-shrink:0;line-height:1.1}
+.sc-rank.r1{color:var(--acc)}.sc-rank.r2{color:var(--org)}.sc-rank.r3{color:var(--yel)}
+.sc-name{font-size:12px;font-weight:800;flex:1}
+.sc-loc{font-size:9px;color:var(--txt3);margin-top:1px}
+.sc-sp{font-size:10px;color:var(--cyn);padding:2px 7px;background:rgba(0,128,160,.07);border-radius:4px;display:inline-block;margin-bottom:4px}
+.sc-ev{font-size:10px;color:var(--txt2);line-height:1.7;margin-bottom:5px}
+.sc-acts{display:flex;gap:4px;flex-wrap:wrap}
+.sc-mfds-check{font-size:9px;padding:1px 6px;border-radius:3px;font-weight:700;border:1px solid;margin-top:3px;display:inline-block}
+.mfds-ok{background:#e8f8f0;color:var(--grn);border-color:#90d8b0}
+.mfds-unk{background:var(--s3);color:var(--txt3);border-color:var(--bd)}
+.cl-box{margin:10px;padding:12px;background:var(--navy);border-radius:var(--r2);color:#fff}
+.cl-hd{font-size:10px;font-weight:700;color:#90a8c8;margin-bottom:8px}
+.cl-sec-hd{font-size:9.5px;font-weight:700;color:#c0d0e8;margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid rgba(255,255,255,.1)}
+.cl-item{font-size:10px;color:rgba(255,255,255,.7);padding:3px 0;border-bottom:1px solid rgba(255,255,255,.07);line-height:1.6}
+.cl-item:last-child{border-bottom:none}
+
+/* ══ 뱃지 ══ */
+.badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:8.5px;font-weight:700}
+.b-g{background:#e8f8f0;color:var(--grn);border:1px solid #90d8b0}
+.b-n{background:var(--s3);color:var(--txt3);border:1px solid var(--bd)}
+.b-c{background:#e8f4ff;color:var(--cyn);border:1px solid #a0c8e8}
+.b-p{background:#f0eeff;color:var(--pur);border:1px solid #b0a0e0}
+.b-y{background:#fdf4e0;color:#806000;border:1px solid #e0b840}
+.chip-f{display:inline-block;padding:1px 5px;border-radius:3px;font-size:8.5px;background:#e8f0ff;color:#1848c0;border:1px solid #a0c0f0;margin:1px}
+
+/* ══ 우측 슬라이드 패널 ══ */
+.slide-panel{position:fixed;top:var(--topbar);right:0;bottom:0;width:var(--panel);background:var(--s1);border-left:2px solid var(--acc);transform:translateX(100%);transition:transform .25s cubic-bezier(.4,0,.2,1);z-index:100;display:flex;flex-direction:column;box-shadow:-4px 0 24px rgba(26,36,64,.1)}
+.slide-panel.open{transform:translateX(0)}
+.sp-head{padding:12px 16px;background:var(--navy);color:#fff;flex-shrink:0;position:relative}
+.sp-name{font-size:13px;font-weight:900;margin-bottom:2px}
+.sp-sub{font-size:10px;color:rgba(255,255,255,.5)}
+.sp-close{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.15);border:none;color:#fff;padding:3px 9px;border-radius:4px;font-size:10px;cursor:pointer}
+.sp-body{flex:1;overflow-y:auto;padding:14px}
+.sp-sec{margin-bottom:14px}
+.sp-sec-hd{font-size:9.5px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;padding-bottom:5px;border-bottom:1px solid var(--bd);margin-bottom:8px}
+.sp-kv{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.sp-kvi{background:var(--s2);border-radius:6px;padding:7px 9px}
+.sp-kvi.full{grid-column:1/-1}
+.sp-kv-lbl{font-size:8px;color:var(--txt3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px}
+.sp-kv-val{font-size:12px;font-weight:700}
+.match-wrap{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.match-circle{width:60px;height:60px;border-radius:50%;border:3px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
+.match-n{font-family:var(--mono);font-size:20px;font-weight:700;line-height:1}
+.match-l{font-size:8px;color:var(--txt3)}
+.match-reasons{font-size:10.5px;color:var(--txt2);line-height:1.9;flex:1}
+.eq-tbl{width:100%;border-collapse:collapse;font-size:10px}
+.eq-tbl th{background:var(--s2);padding:4px 7px;text-align:left;font-size:8.5px;color:var(--txt3);border-bottom:1px solid var(--bd)}
+.eq-tbl td{padding:5px 7px;border-bottom:1px solid rgba(208,216,232,.4);vertical-align:middle}
+.score-bar-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:10px}
+.score-bar-lbl{color:var(--txt3);min-width:55px;font-size:9px}
+.score-bar-track{flex:1;height:5px;background:var(--s3);border-radius:3px;overflow:hidden}
+.score-bar-fill{height:100%;border-radius:3px;transition:width .5s}
+.score-bar-val{font-family:var(--mono);font-size:9.5px;min-width:28px;text-align:right}
+.sp-foot{padding:10px 14px;border-top:1px solid var(--bd);display:flex;gap:6px;flex-shrink:0}
+
+/* ══ AI 로딩 ══ */
+.ai-load{text-align:center;padding:30px 14px;color:var(--txt3)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--bd);border-top-color:var(--acc);border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.ai-steps{font-size:9.5px;margin-top:8px;line-height:2;color:var(--txt3)}
+
+/* ══ 토스트 ══ */
+.toast-w{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9999;pointer-events:none}
+.toast{background:#fff;border:2px solid var(--acc);color:var(--navy);padding:6px 16px;border-radius:7px;font-size:11.5px;white-space:nowrap;animation:ti .2s;display:block}
+@keyframes ti{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+/* API 키 없을 때 경고 배너 */
+.api-warn-banner{background:#fff3cd;border:1px solid #ffc107;padding:6px 12px;font-size:9.5px;color:#856404;display:none;align-items:center;gap:6px}
+.api-warn-banner.show{display:flex}
+
+@media(max-width:1200px){.srch-inp-url{display:none}.hist-chips{display:none}}
+</style>
+</head>
+<body>
+
+<!-- ════════════ 상단 검색바 ════════════ -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-name">CosmeDB</div>
+    <div class="brand-sub">소싱 검색엔진 v5</div>
+  </div>
+
+  <div class="srch-form">
+    <input class="srch-inp" id="si-form"
+      placeholder="🔍 제품유형 입력 (예: 하이드로겔 마스크, 이중튜브, 동결건조 세럼...)"
+      oninput="onFormInput(this.value)"
+      onkeydown="if(event.key==='Enter')runAll()">
+
+    <input class="srch-inp srch-inp-url" id="si-url"
+      placeholder="📎 타겟 제품 URL (선택)">
+
+    <div class="f-sep"></div>
+
+    <div class="f-grp">
+      <span class="f-lbl">지역</span>
+      <span class="fchip on" onclick="setRegion(this,'')" data-v="">전체</span>
+      <span class="fchip" onclick="setRegion(this,'세종')" data-v="세종">세종</span>
+      <span class="fchip" onclick="setRegion(this,'경기')" data-v="경기">경기</span>
+      <span class="fchip" onclick="setRegion(this,'인천')" data-v="인천">인천</span>
+      <span class="fchip" onclick="setRegion(this,'충청')" data-v="충청">충청</span>
+    </div>
+
+    <div class="f-sep"></div>
+
+    <div class="f-grp">
+      <span class="f-lbl">인증</span>
+      <span class="fchip" onclick="toggleCert(this)" data-v="CGMP">CGMP</span>
+      <span class="fchip" onclick="toggleCert(this)" data-v="비건">비건</span>
+      <span class="fchip" onclick="toggleCert(this)" data-v="할랄">할랄</span>
+      <span class="fchip" onclick="toggleCert(this)" data-v="FDA">FDA</span>
+    </div>
+
+    <div class="f-sep"></div>
+
+    <div class="hist-chips" id="hist-chips">
+      <span class="hchip" onclick="quickSearch('하이드로겔 마스크')">하이드로겔 마스크</span>
+      <span class="hchip" onclick="quickSearch('이중튜브')">이중튜브</span>
+      <span class="hchip" onclick="quickSearch('동결건조 세럼')">동결건조 세럼</span>
+    </div>
+
+    <button class="fp-toggle" id="fp-toggle-btn" onclick="toggleFp()">🎛 필터</button>
+
+    <button class="run-btn" onclick="runAll()">🔍 검색</button>
+  </div>
+</div>
+
+<!-- ════════════ 필터 패널 (좌측 슬라이드) ════════════ -->
+<div class="fp" id="fp">
+  <div class="fp-hd">
+    <span class="fp-hd-ttl">🎛 소싱 필터</span>
+    <button class="fp-close-btn" onclick="toggleFp()">◀ 닫기</button>
+  </div>
+  <div class="fp-body">
+
+    <!-- 제형·제품 카테고리 -->
+    <div class="fp-sec">
+      <div class="fp-sec-hd">💊 제형 · 제품 카테고리</div>
+      <div class="cat-grid" id="cat-grid"><!-- JS 렌더 --></div>
+      <div class="sub-wrap" id="sub-wrap">
+        <div class="sub-wrap-hd" id="sub-wrap-hd"></div>
+        <div class="sub-chips" id="sub-chips"></div>
+      </div>
+    </div>
+
+    <!-- 생산 조건 -->
+    <div class="fp-sec">
+      <div class="fp-sec-hd">📊 생산 조건</div>
+      <div class="fp-slider-row">
+        <div class="fp-slider-lbl">
+          <span>월 CAPA (최소)</span>
+          <span class="fp-slider-val" id="capa-val">제한없음</span>
+        </div>
+        <input type="range" class="fp-range" id="capa-range" min="0" max="500" step="50" value="0"
+          oninput="updateCapa(this.value)">
+      </div>
+      <div class="fp-slider-row">
+        <div class="fp-slider-lbl">
+          <span>MOQ (최대)</span>
+          <span class="fp-slider-val" id="moq-val">제한없음</span>
+        </div>
+        <input type="range" class="fp-range" id="moq-range" min="0" max="200" step="10" value="200"
+          oninput="updateMoq(this.value)">
+      </div>
+    </div>
+
+    <!-- 지역 / 거리 -->
+    <div class="fp-sec">
+      <div class="fp-sec-hd">📍 지역 / 거리</div>
+      <div class="fp-chips" style="margin-bottom:6px">
+        <span class="fp-chip on" data-v="" onclick="setFpRegion(this,'')">전체</span>
+        <span class="fp-chip" data-v="세종" onclick="setFpRegion(this,'세종')">세종</span>
+        <span class="fp-chip" data-v="경기" onclick="setFpRegion(this,'경기')">경기</span>
+        <span class="fp-chip" data-v="인천" onclick="setFpRegion(this,'인천')">인천</span>
+        <span class="fp-chip" data-v="충청" onclick="setFpRegion(this,'충청')">충청</span>
+      </div>
+      <div class="fp-slider-row">
+        <div class="fp-slider-lbl">
+          <span>거리 제한</span>
+          <span class="fp-slider-val" id="dist-val">전체</span>
+        </div>
+        <input type="range" class="fp-range" id="dist-range" min="0" max="300" step="10" value="300"
+          oninput="updateDist(this.value)">
+      </div>
+    </div>
+
+    <!-- 인증 -->
+    <div class="fp-sec">
+      <div class="fp-sec-hd">🏆 인증</div>
+      <div class="fp-chips">
+        <span class="fp-chip" data-v="CGMP" onclick="toggleFpCert(this)">CGMP</span>
+        <span class="fp-chip" data-v="ISO22716" onclick="toggleFpCert(this)">ISO22716</span>
+        <span class="fp-chip" data-v="비건" onclick="toggleFpCert(this)">비건</span>
+        <span class="fp-chip" data-v="할랄" onclick="toggleFpCert(this)">할랄</span>
+        <span class="fp-chip" data-v="FDA" onclick="toggleFpCert(this)">FDA</span>
+        <span class="fp-chip" data-v="CE" onclick="toggleFpCert(this)">CE</span>
+      </div>
+    </div>
+
+    <!-- 파렛트 -->
+    <div class="fp-sec">
+      <div class="fp-sec-hd">📦 파렛트</div>
+      <div class="fp-chips">
+        <span class="fp-chip" data-v="KPP" onclick="toggleFpPlt(this)">KPP</span>
+        <span class="fp-chip" data-v="AJ" onclick="toggleFpPlt(this)">AJ렌탈</span>
+      </div>
+    </div>
+
+  </div>
+  <!-- API 키 설정 -->
+  <div class="api-key-wrap">
+    <div class="api-key-lbl">🔑 Anthropic API Key
+      <span class="api-status" id="api-status" style="color:var(--org)">미설정</span>
+    </div>
+    <input class="api-key-inp" id="api-key-inp" type="password"
+      placeholder="sk-ant-api03-..."
+      oninput="updateApiKey(this.value)">
+    <div style="margin-top:6px;display:flex;gap:4px">
+      <button class="tbtn" style="flex:1;font-size:9px" onclick="openClaudeAi()">🤖 Claude.ai 열기</button>
+      <button class="tbtn" style="flex:1;font-size:9px" onclick="copyPrompt('claude')">📋 프롬프트 복사</button>
+    </div>
+    <div style="margin-top:4px;font-size:8px;color:var(--txt3);line-height:1.5">
+      키 저장 시 브라우저 로컬에 보관됩니다<br>
+      <span style="color:var(--cyn)">N8N 연동 시 키 없이 동작 예정</span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ 3열 메인 ════════════ -->
+<div class="main" id="main">
+
+  <!-- Col 1: DB 매칭 -->
+  <div class="col c1">
+    <div class="col-head">
+      <span class="col-title">🏭 가능처 DB 매칭</span>
+      <span class="col-cnt" id="c1-cnt">0</span>
+      <span class="col-sub">내부 DB · 설비 직접 매칭</span>
+    </div>
+    <div class="col-toolbar">
+      <span class="tb-info" id="c1-info">검색 전</span>
+      <button class="tbtn" onclick="sortC1('match')">⚙ 매칭순</button>
+      <button class="tbtn" onclick="sortC1('trust')">⭐ 지수순</button>
+      <button class="tbtn" onclick="sortC1('dist')">📍 거리순</button>
+    </div>
+    <div class="db-warn" id="db-warn">⚠ 설비 보유 업체 부족 — Col3 Scout 자동 강화됨</div>
+    <div class="col-body" id="c1-body">
+      <div class="empty">
+        <div class="ei">🏭</div>
+        <div class="et">제품유형 입력 후 검색</div>
+        <div class="es">150개 내부 DB · 설비·인증·거리 자동 매칭<br>클릭 → 우측 상세패널<br><span style="font-size:9px;color:var(--bd2)">🎛 필터에서 CAPA·거리·파렛트 추가 설정</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Col 2: 유사제품 역추적 -->
+  <div class="col c2">
+    <div class="col-head">
+      <span class="col-title">🛒 유사제품 역추적</span>
+      <span class="col-cnt" id="c2-cnt">0</span>
+      <span class="col-sub">Claude AI · 제조판매원 추적</span>
+    </div>
+    <div class="col-toolbar">
+      <span class="tb-info" id="c2-info">검색 전</span>
+      <button class="tbtn" onclick="filterC2('all')">전체</button>
+      <button class="tbtn" onclick="filterC2('high')">✅ 확인</button>
+      <button class="tbtn" onclick="filterC2('mid')">🔶 추정</button>
+      <button class="tbtn" onclick="filterC2('low')">❓ 미확인</button>
+    </div>
+    <div class="api-warn-banner" id="c2-api-warn">
+      🔑 API 키 미설정 — 🎛 필터 패널 하단에서 입력하세요
+    </div>
+    <div class="col-body" id="c2-body">
+      <div class="empty">
+        <div class="ei">🛒</div>
+        <div class="et">Claude AI 유사제품 분석</div>
+        <div class="es">시중 유사제품 제조판매원 추적<br>DB 없을 시 단건등록 버튼 활성화</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Col 3: Ultimate Scout -->
+  <div class="col c3">
+    <div class="col-head">
+      <span class="col-title">🤖 Ultimate Scout</span>
+      <span class="col-cnt" id="c3-cnt">—</span>
+      <span class="col-sub">강소5 + 히든5 · 5중 탐색</span>
+    </div>
+    <div class="col-toolbar">
+      <span class="tb-info" id="c3-info">검색 전</span>
+      <button class="tbtn pur" id="scout-run-btn" onclick="runScout()">▶ Scout 실행</button>
+      <button class="tbtn" onclick="copyPrompt('claude')">📋 Claude용</button>
+      <button class="tbtn" onclick="copyPrompt('gpt')">📋 GPT용</button>
+    </div>
+    <div style="padding:8px 10px;border-bottom:1px solid var(--bd);background:var(--s2)">
+      <input id="scout-kw" placeholder="Scout 키워드 (검색 시 자동 입력, 직접 수정 가능)"
+        style="width:100%;padding:5px 9px;background:var(--s1);border:1px solid var(--bd2);border-radius:var(--r);font-size:11.5px;color:var(--txt);outline:none">
+    </div>
+    <div class="api-warn-banner" id="c3-api-warn">
+      🔑 API 키 미설정 — 🎛 필터 패널 하단에서 입력 또는 📋 프롬프트 복사 사용
+    </div>
+    <div class="col-body" id="c3-body">
+      <div class="empty">
+        <div class="ei">🤖</div>
+        <div class="et">Ultimate Scout</div>
+        <div class="es">대형3사 제외 강소·히든 제조사<br>5중 보안 탐색 로직 (No-Miss)<br><span style="font-size:9.5px;color:var(--bd2)">검색 실행 후 ▶ Scout 버튼 클릭</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════════════ 우측 슬라이드 상세 패널 ════════════ -->
+<div class="slide-panel" id="slide-panel">
+  <div class="sp-head">
+    <div id="sp-name" class="sp-name">업체명</div>
+    <div id="sp-sub" class="sp-sub">지역 · 거리 · 상태</div>
+    <button class="sp-close" onclick="closePanel()">✕ 닫기</button>
+  </div>
+  <div class="sp-body" id="sp-body">
+    <div class="empty" style="min-height:160px"><div class="ei">🏭</div><div class="et">업체 카드를 클릭하세요</div></div>
+  </div>
+  <div class="sp-foot">
+    <button class="tbtn pri" style="flex:1" onclick="showToast('DB조회 탭 이동 → 메인파일 연결')">🗃 DB조회 상세</button>
+    <button class="tbtn pur" style="flex:1" onclick="showToast('비교 목록에 추가됨')">⚖ 비교추가</button>
+    <button class="tbtn" onclick="closePanel()">닫기</button>
+  </div>
+</div>
+
+<div class="toast-w" id="toast-w" style="display:none"></div>
+
+<!-- ════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════ -->
+<script>
+/* ══════════════════════════════════════
+   CONFIG — API 키 + localStorage 자동 저장
+   ─────────────────────────────────────
+   [N8N 교체 시 변경 지점]
+   현재: Anthropic API 직접 호출
+   교체: N8N_WEBHOOK_URL 에 fetch만 바꾸면 됨
+══════════════════════════════════════ */
+let ANTHROPIC_API_KEY = '';
+const LS_KEY = 'cosmedb_api_key';
+
+// ── localStorage 복원 (페이지 로드 시 자동)
+(function initApiKey(){
+  const saved = localStorage.getItem(LS_KEY) || '';
+  if(saved){
+    ANTHROPIC_API_KEY = saved;
+    // 입력창은 DOMContentLoaded 이후 채움
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const inp = document.getElementById('api-key-inp');
+      if(inp) inp.value = saved;
+      _applyKeyStatus(saved);
+    });
+  }
+})();
+
+function updateApiKey(v) {
+  ANTHROPIC_API_KEY = v.trim();
+  if(ANTHROPIC_API_KEY){
+    localStorage.setItem(LS_KEY, ANTHROPIC_API_KEY);
+  } else {
+    localStorage.removeItem(LS_KEY);
+  }
+  _applyKeyStatus(ANTHROPIC_API_KEY);
+}
+
+function _applyKeyStatus(key){
+  const status = document.getElementById('api-status');
+  const c2w = document.getElementById('c2-api-warn');
+  const c3w = document.getElementById('c3-api-warn');
+  if(!status) return;
+  if(key){
+    status.textContent = '✅ 저장됨';
+    status.style.color = 'var(--grn)';
+    c2w && c2w.classList.remove('show');
+    c3w && c3w.classList.remove('show');
+  } else {
+    status.textContent = '미설정';
+    status.style.color = 'var(--org)';
+  }
+}
+
+/* ══════════════════════════════════════
+   callAI() — 단일 AI 호출 추상화 레이어
+   ─────────────────────────────────────
+   현재 구현: Anthropic API 직접 호출
+   N8N 전환 시 이 함수 내부만 교체:
+     const r = await fetch(N8N_WEBHOOK_URL,{
+       method:'POST',
+       headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({system, user:userMsg})
+     });
+     return await r.text();
+══════════════════════════════════════ */
+async function callAI(systemPrompt, userMsg, maxTokens=1000){
+  if(!ANTHROPIC_API_KEY) throw new Error('API_KEY_MISSING');
+  const resp = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true',
+    },
+    body: JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages:[{role:'user', content: userMsg}]
+    })
+  });
+  const data = await resp.json();
+  if(data.error) throw new Error(`[${data.error.type}] ${data.error.message}`);
+  return (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+}
+
+/* ══════════════════════════════════════
+   DB (메인파일 병합 시 전역 DB 사용)
+══════════════════════════════════════ */
+const DB = [
+  {id:0,code:'1000004514',name:'콜마스크 주식회사',sido:'인천광역시',region:'인천',addr:'인천광역시 남동구 남동대로 405',dist:125,time:'94분',status:'CONFIRMED',ceo:'유차영',trust:70,capa:2300000,certs:['CGMP','ISO22716','비건','할랄'],plt:'KPP+AJ',forms:{'마스크/팩':['침적마스크','하이드로겔팩','시트마스크']},equip:[{n:'하이드로겔(1대)',c:'200만매/월'},{n:'셀라인(2대)',c:'—'},{n:'파우치(10대)',c:'—'}]},
+  {id:1,code:'1000004538',name:'주식회사 에치엔지',sido:'세종특별자치시',region:'세종',addr:'세종특별자치시 전의면 산단길 21-164',dist:10,time:'8분',status:'CONFIRMED',ceo:'유차영',trust:70,capa:1362319,certs:['CGMP','ISO22716'],plt:'KPP+AJ',forms:{'기초케어':['크림','로션','세럼']},equip:[{n:'듀얼서보 충전기(1대)',c:'—'},{n:'셀라인(6대)',c:'—'},{n:'이지필(3대)',c:'—'}]},
+  {id:2,code:'1000000598',name:'주식회사 정코스',sido:'충청북도',region:'충청',addr:'충청북도 청주시 흥덕구 오송읍',dist:35,time:'26분',status:'CONFIRMED',ceo:'정관영',trust:69,capa:350000,certs:['CGMP','ISO22716','비건','할랄'],plt:'KPP',forms:{},equip:[{n:'셀라인(4대)',c:'—'},{n:'바이알(2대)',c:'—'},{n:'정량(6대)',c:'—'}]},
+  {id:3,code:'1000000583',name:'아인코스 주식회사',sido:'충청남도',region:'충청',addr:'충청남도 천안시 서북구 백석공단 1로 79',dist:50,time:'38분',status:'CONFIRMED',ceo:'도점섭',trust:63,capa:1300000,certs:['ISO22716'],plt:'KPP',forms:{},equip:[{n:'셀라인(1대)',c:'—'},{n:'2노즐(2대)',c:'—'},{n:'가압충전기(3대)',c:'—'}]},
+  {id:9,code:'1000007259',name:'주식회사비엔코스',sido:'충청북도',region:'충청',addr:'충청북도 청주시 청원구 오창읍',dist:35,time:'26분',status:'CONFIRMED',ceo:'권태광',trust:57,capa:700000,certs:['CGMP','ISO22716'],plt:'KPP',forms:{'기초케어':['크림','로션']},equip:[{n:'하이드로겔(2대)',c:'—'},{n:'진공충전기(4대)',c:'—'},{n:'정량(9대)',c:'—'}]},
+  {id:14,code:'1000007039',name:'주식회사 그루비코스메틱',sido:'충청남도',region:'충청',addr:'충청남도 보령시 웅천읍',dist:150,time:'112분',status:'CONFIRMED',ceo:'김승기',trust:54,capa:428350,certs:['ISO22716','비건'],plt:'KPP',forms:{'기초케어':['크림','로션'],'기타':['파우치']},equip:[{n:'듀얼서보 충전기(1대)',c:'—'},{n:'듀얼턴테이블 충전기(1대)',c:'—'},{n:'셀라인(3대)',c:'—'}]},
+  {id:21,code:'1000009761',name:'주식회사 제이제이클럽',sido:'인천광역시',region:'인천',addr:'인천광역시 남동구 앵고개로 385',dist:125,time:'94분',status:'CONFIRMED',ceo:'임재훈',trust:52,capa:340000,certs:['ISO22716','비건'],plt:'KPP',forms:{},equip:[{n:'2중 튜브/일자컷팅(1대)',c:'—'},{n:'정량(5대)',c:'—'},{n:'분말충진기(1대)',c:'—'}]},
+  {id:55,code:'1000000593',name:'(주)코바스',sido:'경기도',region:'경기',addr:'경기도 파주시 신촌로 43',dist:110,time:'82분',status:'CONFIRMED',ceo:'고숙량',trust:38,capa:130000,certs:['CGMP'],plt:'KPP',forms:{'마스크/팩':['마스크팩']},equip:[{n:'마스크팩 에센스 충전기(8대)',c:'—'},{n:'패치 충전기(2대)',c:'—'}]},
+  {id:77,code:'1000000600',name:'더말코리아',sido:'충청북도',region:'충청',addr:'충청북도 음성군 삼성면',dist:150,time:'112분',status:'CONFIRMED',ceo:'정연호',trust:33,capa:0,certs:['ISO22716'],plt:'KPP',forms:{},equip:[{n:'하이드로겔(2대)',c:'—'},{n:'셀라인(1대)',c:'—'}]},
+  {id:87,code:'1000005353',name:'주식회사 셀바이오휴먼텍',sido:'경기도',region:'경기',addr:'경기도 안양시 동안구',dist:110,time:'82분',status:'CONFIRMED',ceo:'이권선',trust:31,capa:100000,certs:[],plt:'KPP',forms:{},equip:[{n:'하이드로겔(2대)',c:'—'},{n:'파우치(2대)',c:'—'},{n:'패드(1대)',c:'—'}]},
+  {id:95,code:'1000006141',name:'주식회사 비와이에이치',sido:'인천광역시',region:'인천',addr:'인천광역시 남동구 청능대로448번길 149',dist:125,time:'94분',status:'CONFIRMED',ceo:'정동훈',trust:29,capa:0,certs:['ISO22716'],plt:'KPP',forms:{},equip:[{n:'이중튜브/일자컷팅(2대)',c:'—'},{n:'원형/일자컷팅(3대)',c:'—'}]},
+  {id:18,code:'1000000604',name:'주식회사 인코스',sido:'경기도',region:'경기',addr:'경기도 부천시 조마루로385번길 92',dist:125,time:'94분',status:'CONFIRMED',ceo:'주진호',trust:52,capa:300000,certs:['ISO22716','비건'],plt:'KPP+AJ',forms:{},equip:[{n:'쿠션(2대)',c:'—'},{n:'마스카라(3대)',c:'—'},{n:'3열 서보충전기(1대)',c:'—'}]},
+];
+
+/* ══════════════════════════════════════
+   CATEGORIES — 계층형 제품 카테고리
+   큰 카테고리 선택 → 하위 항목 선택
+══════════════════════════════════════ */
+const CATEGORIES = [
+  {id:'mask', label:'마스크 계열', icon:'💊',
+   items:['하이드로겔 마스크','시트마스크','바이오셀룰로오스 마스크','다회패드','파우치마스크']},
+  {id:'skin', label:'스킨케어', icon:'💧',
+   items:['크림','세럼·앰플','로션·에멀젼','미스트·토너']},
+  {id:'sun', label:'선케어', icon:'☀️',
+   items:['선스틱','선크림','선쿠션']},
+  {id:'makeup', label:'색조·기능성', icon:'💄',
+   items:['파운데이션','BB·CC크림','쿠션']},
+  {id:'pkg', label:'특수 용기·포장', icon:'📦',
+   items:['이중튜브','블리스터팩','에어리스펌프','다층브로우']},
+  {id:'fd', label:'동결건조', icon:'❄️',
+   items:['동결건조 마스크','동결건조 세럼']},
+  {id:'pack', label:'포장 전문', icon:'🏭',
+   items:['포장 OEM']},
+];
+
+/* ══════════════════════════════════════
+   FAM — 제형 동의어 사전 (전면 확장)
+   7개 대분류 완전 반영
+══════════════════════════════════════ */
+const FAM = {
+  // ══ 마스크 계열 ══
+  '하이드로겔 마스크':{equip_keys:['하이드로겔','패드'],aliases:['하이드로겔팩','겔마스크','Hydrogel Mask','수분겔마스크','하이드로겔'],category:'마스크 계열'},
+  '시트마스크':{equip_keys:['셀라인','마스크팩'],aliases:['침적마스크','패브릭마스크','Sheet Mask','부직포마스크','마스크팩'],category:'마스크 계열'},
+  '바이오셀룰로오스 마스크':{equip_keys:['셀라인','BC'],aliases:['발효마스크','BC마스크','Bio-Cellulose','BC팩','바이오셀룰로오스'],category:'마스크 계열'},
+  '다회패드':{equip_keys:['패드','패치충전'],aliases:['멀티패드','패드마스크','코인마스크','다회용패드'],category:'마스크 계열'},
+  '파우치마스크':{equip_keys:['파우치','정량'],aliases:['워시오프팩','슬리핑팩','필오프팩','Sleeping Mask','파우치팩','슬리핑마스크'],category:'마스크 계열'},
+  // ══ 스킨케어 ══
+  '크림':{equip_keys:['크림충전기','셀라인','정량'],aliases:['보습크림','수분크림','아이크림','스킨크림','Cream','밤','에멀젼크림'],category:'스킨케어'},
+  '세럼·앰플':{equip_keys:['바이알','정량'],aliases:['앰플','에센스','원액','Serum','Ampoule','세럼','부스터'],category:'스킨케어'},
+  '로션·에멀젼':{equip_keys:['셀라인','정량'],aliases:['에멀젼','밀크로션','Lotion','Emulsion','유액','로션'],category:'스킨케어'},
+  '미스트·토너':{equip_keys:['정량','셀라인'],aliases:['스킨','화장수','Toner','Mist','스프레이','토너','미스트'],category:'스킨케어'},
+  // ══ 선케어 ══
+  '선스틱':{equip_keys:['립충전기','스틱충전'],aliases:['썬스틱','Sun Stick','선크림스틱'],category:'선케어'},
+  '선크림':{equip_keys:['정량','셀라인'],aliases:['썬크림','자외선차단크림','SPF','PA','Sunscreen','자외선차단제'],category:'선케어'},
+  '선쿠션':{equip_keys:['쿠션'],aliases:['썬쿠션','Sun Cushion','UV쿠션'],category:'선케어'},
+  // ══ 색조·기능성 ══
+  '파운데이션':{equip_keys:['정량','셀라인'],aliases:['리퀴드파운데이션','Foundation','파운데이션크림'],category:'색조'},
+  'BB·CC크림':{equip_keys:['정량','셀라인'],aliases:['BB크림','CC크림','BB Cream','CC Cream','비비크림'],category:'색조'},
+  '쿠션':{equip_keys:['쿠션'],aliases:['에어쿠션','Air Cushion','쿠션팩트'],category:'색조'},
+  // ══ 특수 용기·포장 ══
+  '이중튜브':{equip_keys:['듀얼','이중튜브','2중 튜브','듀얼서보','듀얼턴테이블'],aliases:['듀얼튜브','이층튜브','이중관','Dual Tube','분리충전','AB크림','이중충전'],category:'특수용기'},
+  '블리스터팩':{equip_keys:['블리스터'],aliases:['블리스터','Blister Pack','블리스터포장','코인팩'],category:'특수용기'},
+  '에어리스펌프':{equip_keys:['에어리스'],aliases:['에어리스','Airless Pump','진공펌프용기','진공용기'],category:'특수용기'},
+  '다층브로우':{equip_keys:['다층','블로우'],aliases:['MULTIBLOW','다층구조용기','다층튜브'],category:'특수용기'},
+  // ══ 동결건조·특수공법 ══
+  '동결건조 마스크':{equip_keys:['동결건조기','동건','FD'],aliases:['Freeze-dry Mask','동결마스크','냉동건조마스크','동결건조','FD마스크'],category:'동결건조'},
+  '동결건조 세럼':{equip_keys:['동결건조기','동건','FD','바이알'],aliases:['Lyophilized Serum','동결건조앰플','동건세럼','FD세럼'],category:'동결건조'},
+  // ══ 포장·용기 전문 ══
+  '포장 OEM':{equip_keys:['셀라인','정량'],aliases:['포장대행','충전포장','내용물충전','포장전문업체'],category:'포장전문'},
+  // ══ 기존 항목 호환성 유지 ══
+  '하이드로겔 아이패치':{equip_keys:['하이드로겔','패드'],aliases:['하이드로겔','겔마스크','아이패치','겔팩'],category:'마스크 계열'},
+  '동결건조볼':{equip_keys:['동결건조기','동건','FD'],aliases:['FD볼','동건볼','프리즈드라이볼','동결건조'],category:'동결건조'},
+  '향수':{equip_keys:['클리핑기','크림핑기','스프레이충전','알코올충전'],aliases:['오드퍼퓸','EDP','EDT','오드뚜왈렛','퍼퓸','프래그런스'],category:'향수'},
+  '오드퍼퓸':{equip_keys:['클리핑기','크림핑기','스프레이충전','알코올충전'],aliases:['EDP','향수','퍼퓸','오드뚜왈렛'],category:'향수'},
+  '클렌징오일':{equip_keys:['정량','셀라인'],aliases:['클렌징','오일클렌저'],category:'클렌징'},
+  '폼클렌저':{equip_keys:['셀라인','정량'],aliases:['클렌징폼','클렌징젤'],category:'클렌징'},
+  '바디로션':{equip_keys:['정량','셀라인'],aliases:['바디크림','바디에멀젼'],category:'바디'},
+  '샴푸':{equip_keys:['정량'],aliases:['헤어샴푸','헤어케어'],category:'헤어'},
+  '패치':{equip_keys:['패드','패치충전'],aliases:['아이패치','립패치','하이드로콜로이드'],category:'마스크 계열'},
+};
+
+/* ══════════════════════════════════════
+   상태
+══════════════════════════════════════ */
+const S = {
+  keyword:'', canonical:'', equip_keys:[], aliases:[],
+  region:'', certs:new Set(),
+  capaMin:0, moqMax:200, distMax:300,
+  pltFilter:new Set(),
+  sortMode:'match', activeCode:null,
+};
+let _c1results = [];
+let _activeCat = null;
+
+/* ══════════════════════════════════════
+   유틸
+══════════════════════════════════════ */
+function showToast(m){
+  const w=document.getElementById('toast-w');
+  w.style.display='block';
+  w.innerHTML=`<div class="toast">${m}</div>`;
+  clearTimeout(w._t);
+  w._t=setTimeout(()=>w.style.display='none',2600);
+}
+function tc(s){return s>=70?'var(--grn)':s>=50?'var(--yel)':s>0?'var(--org)':'var(--txt3)'}
+function dc(km){return km===0?'#3b82f6':km<=50?'var(--grn)':km<=100?'var(--yel)':'var(--org)'}
+
+/* ══════════════════════════════════════
+   정규화 엔진
+══════════════════════════════════════ */
+function normalize(input){
+  if(!input) return null;
+  const q=input.toLowerCase().trim();
+  for(const [k,v] of Object.entries(FAM)){
+    if(k.toLowerCase()===q) return {canonical:k,...v};
+    if(q.includes(k.toLowerCase())||k.toLowerCase().includes(q)) return {canonical:k,...v};
+    if(v.aliases.some(a=>a.toLowerCase()===q||q.includes(a.toLowerCase())||a.toLowerCase().includes(q)))
+      return {canonical:k,...v};
+  }
+  return null;
+}
+
+/* ══════════════════════════════════════
+   입력 핸들러
+══════════════════════════════════════ */
+function onFormInput(v){
+  const f=normalize(v);
+  if(f){S.canonical=f.canonical;S.equip_keys=f.equip_keys||[];S.aliases=f.aliases||[];}
+  else{S.canonical=v;S.equip_keys=[];S.aliases=[];}
+  S.keyword=v;
+}
+
+function setRegion(el,v){
+  document.querySelectorAll('.topbar .fchip[data-v]').forEach(c=>{
+    if(['','세종','경기','인천','충청'].includes(c.dataset.v)) c.classList.remove('on');
+  });
+  el.classList.add('on');
+  // 필터 패널 동기화
+  document.querySelectorAll('#fp .fp-chip[data-v]').forEach(c=>{
+    if(['','세종','경기','인천','충청'].includes(c.dataset.v)){
+      c.classList.toggle('on', c.dataset.v===v);
+    }
+  });
+  S.region=v;
+}
+
+function toggleCert(el){
+  el.classList.toggle('on');
+  el.classList.contains('on')?S.certs.add(el.dataset.v):S.certs.delete(el.dataset.v);
+  // 필터 패널 동기화
+  const fpChip=document.querySelector(`#fp .fp-chip[data-v="${el.dataset.v}"]`);
+  if(fpChip) fpChip.classList.toggle('on', el.classList.contains('on'));
+}
+
+function quickSearch(kw){
+  document.getElementById('si-form').value=kw;
+  onFormInput(kw);
+  runAll();
+}
+
+/* ══════════════════════════════════════
+   필터 패널 토글
+══════════════════════════════════════ */
+function toggleFp(){
+  const fp=document.getElementById('fp');
+  const main=document.getElementById('main');
+  const btn=document.getElementById('fp-toggle-btn');
+  const isOpen=fp.classList.contains('open');
+  fp.classList.toggle('open',!isOpen);
+  main.classList.toggle('fp-open',!isOpen);
+  btn.classList.toggle('active',!isOpen);
+  btn.textContent=isOpen?'🎛 필터':'🎛 닫기';
+}
+
+/* ══════════════════════════════════════
+   카테고리 선택 (계층형)
+══════════════════════════════════════ */
+function renderCatGrid(){
+  const grid=document.getElementById('cat-grid');
+  grid.innerHTML=CATEGORIES.map(cat=>
+    `<button class="cat-btn" id="cat-${cat.id}" onclick="selectCat('${cat.id}')">
+      ${cat.icon}<br><span style="font-size:8.5px">${cat.label}</span>
+    </button>`
+  ).join('');
+}
+
+function selectCat(catId){
+  const cat=CATEGORIES.find(c=>c.id===catId);
+  if(!cat) return;
+  const isActive=_activeCat===catId;
+  _activeCat=isActive?null:catId;
+  document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));
+  if(!isActive) document.getElementById(`cat-${catId}`)?.classList.add('active');
+  const subWrap=document.getElementById('sub-wrap');
+  const subChips=document.getElementById('sub-chips');
+  const subHd=document.getElementById('sub-wrap-hd');
+  if(isActive||!cat.items.length){subWrap.classList.remove('show');return;}
+  subHd.textContent=`${cat.icon} ${cat.label} — 세부 선택`;
+  subChips.innerHTML=cat.items.map(item=>
+    `<span class="sub-chip" onclick="applySubItem('${item.replace(/'/g,"\\'")}')">${item}</span>`
+  ).join('');
+  subWrap.classList.add('show');
+}
+
+function applySubItem(canonical){
+  document.getElementById('si-form').value=canonical;
+  onFormInput(canonical);
+  document.querySelectorAll('.sub-chip').forEach(c=>{
+    c.classList.toggle('sel',c.textContent.trim()===canonical);
+  });
+  runAll();
+}
+
+/* ══════════════════════════════════════
+   필터 패널 — 지역/인증/파렛트/슬라이더
+══════════════════════════════════════ */
+function setFpRegion(el,v){
+  document.querySelectorAll('#fp .fp-chip[data-v]').forEach(c=>{
+    if(['','세종','경기','인천','충청'].includes(c.dataset.v)) c.classList.remove('on');
+  });
+  el.classList.add('on');
+  // 상단 topbar 동기화
+  document.querySelectorAll('.topbar .fchip[data-v]').forEach(c=>{
+    if(['','세종','경기','인천','충청'].includes(c.dataset.v)){
+      c.classList.toggle('on',c.dataset.v===v);
+    }
+  });
+  S.region=v;
+}
+
+function toggleFpCert(el){
+  el.classList.toggle('on');
+  el.classList.contains('on')?S.certs.add(el.dataset.v):S.certs.delete(el.dataset.v);
+  // 상단 topbar 동기화
+  const topChip=document.querySelector(`.topbar .fchip[data-v="${el.dataset.v}"]`);
+  if(topChip) topChip.classList.toggle('on',el.classList.contains('on'));
+}
+
+function toggleFpPlt(el){
+  el.classList.toggle('on');
+  el.classList.contains('on')?S.pltFilter.add(el.dataset.v):S.pltFilter.delete(el.dataset.v);
+}
+
+function updateCapa(v){
+  S.capaMin=parseInt(v);
+  document.getElementById('capa-val').textContent=parseInt(v)===0?'제한없음':`${v}만개↑`;
+}
+
+function updateMoq(v){
+  S.moqMax=parseInt(v);
+  document.getElementById('moq-val').textContent=parseInt(v)>=200?'제한없음':`${v}천개↓`;
+}
+
+function updateDist(v){
+  S.distMax=parseInt(v);
+  document.getElementById('dist-val').textContent=parseInt(v)>=300?'전체':`${v}km`;
+  // 상단 거리 상태 반영 필요시 추가
+}
+
+/* ══════════════════════════════════════
+   전체 실행
+══════════════════════════════════════ */
+function runAll(){
+  const kw=document.getElementById('si-form').value.trim();
+  if(!kw){showToast('⚠ 제품유형을 입력하세요');return;}
+  onFormInput(kw);
+  document.getElementById('scout-kw').value=S.canonical||kw;
+  updateHist(kw);
+  runC1();
+  runC2();
+  if(ANTHROPIC_API_KEY){
+    runScout();
+  } else {
+    document.getElementById('c3-info').textContent='🔑 키 설정 후 ▶ Scout 실행';
+    document.getElementById('c3-cnt').textContent='—';
+  }
+}
+
+function updateHist(kw){
+  const chips=document.getElementById('hist-chips');
+  const existing=[...chips.querySelectorAll('.hchip')].map(c=>c.textContent);
+  if(existing.includes(kw)) return;
+  const chip=document.createElement('span');
+  chip.className='hchip';
+  chip.textContent=kw;
+  chip.onclick=()=>quickSearch(kw);
+  if(chips.children.length>=5) chips.removeChild(chips.firstChild);
+  chips.appendChild(chip);
+}
+
+/* ══════════════════════════════════════
+   Col1: DB 매칭 + 신뢰도 스코어
+   CAPA · 거리 · 파렛트 필터 추가
+══════════════════════════════════════ */
+function calcMatchScore(d,equip_keys){
+  let score=0;
+  const eMatch=equip_keys.length>0&&d.equip?.some(e=>
+    equip_keys.some(k=>e.n.toLowerCase().includes(k.toLowerCase())));
+  if(eMatch) score+=40;
+  score+=Math.round((d.trust/100)*30);
+  if(d.dist===0) score+=20;
+  else if(d.dist<=50) score+=18;
+  else if(d.dist<=100) score+=12;
+  else if(d.dist<=150) score+=7;
+  else score+=3;
+  if(d.certs?.includes('CGMP')) score+=7;
+  if(d.certs?.some(c=>['ISO22716','비건','할랄','FDA'].includes(c))) score+=3;
+  return Math.min(score,100);
+}
+
+function runC1(){
+  document.getElementById('c1-body').innerHTML=
+    '<div class="ai-load"><span class="spin"></span> DB 매칭 중...</div>';
+  setTimeout(()=>{
+    const equip_keys=S.equip_keys;
+    const aliases=S.aliases;
+    const allTerms=[S.canonical,...aliases].filter(Boolean);
+    let results=DB.filter(d=>{
+      const eMatch=equip_keys.length>0&&d.equip?.some(e=>
+        equip_keys.some(k=>e.n.toLowerCase().includes(k.toLowerCase())));
+      const dbForms=Object.values(d.forms||{}).flat();
+      const fMatch=allTerms.some(t=>
+        dbForms.some(f=>f.toLowerCase().includes(t.toLowerCase())||t.toLowerCase().includes(f.toLowerCase())));
+      // 지역 필터
+      if(S.region&&!d.sido.includes(S.region)&&!d.region.includes(S.region)) return false;
+      // 인증 필터
+      if(S.certs.size>0&&![...S.certs].every(c=>d.certs?.some(dc=>dc.includes(c)))) return false;
+      // CAPA 필터 (0=제한없음)
+      if(S.capaMin>0&&d.capa>0&&d.capa<S.capaMin*10000) return false;
+      // 거리 필터 (300=전체)
+      if(S.distMax<300&&d.dist>0&&d.dist>S.distMax) return false;
+      // 파렛트 필터
+      if(S.pltFilter.size>0){
+        const pltStr=d.plt||'';
+        if(![...S.pltFilter].some(p=>pltStr.includes(p))) return false;
+      }
+      return eMatch||fMatch;
+    });
+    results.forEach(d=>{
+      d._score=calcMatchScore(d,equip_keys);
+      d._eHits=d.equip?.filter(e=>equip_keys.some(k=>e.n.toLowerCase().includes(k.toLowerCase())))||[];
+    });
+    results.sort((a,b)=>b._score-a._score);
+    results=results.slice(0,10);
+    _c1results=results;
+    document.getElementById('c1-cnt').textContent=results.length;
+    // 필터 정보 표시
+    const filterInfo=[];
+    if(S.capaMin>0) filterInfo.push(`CAPA≥${S.capaMin}만`);
+    if(S.distMax<300) filterInfo.push(`거리≤${S.distMax}km`);
+    if(S.pltFilter.size>0) filterInfo.push([...S.pltFilter].join('/'));
+    document.getElementById('c1-info').textContent=
+      `${results.length}개 매칭${filterInfo.length?' ('+filterInfo.join('·')+')':''}`;
+    document.getElementById('db-warn').classList.toggle('show',results.length<3);
+    renderC1(results);
+  },400);
+}
+
+function renderC1(results){
+  if(!results.length){
+    document.getElementById('c1-body').innerHTML=`
+      <div class="empty"><div class="ei">🏭</div><div class="et">매칭 업체 없음</div>
+      <div class="es">🎛 필터 조건 완화 또는<br>Col3 Scout 실행</div></div>`;
+    return;
+  }
+  document.getElementById('c1-body').innerHTML=results.map((d,i)=>{
+    const allF=Object.values(d.forms||{}).flat();
+    const stB=d.status==='CONFIRMED'
+      ?'<span class="badge b-g">✓ CONFIRMED</span>'
+      :'<span class="badge b-n">SHADOW</span>';
+    const eqB=d._eHits.length>0?`<span class="eq-hit">⚙ 설비매칭</span>`:'';
+    const eqNames=d._eHits.map(e=>`<span style="font-size:9px;color:var(--acc)">🔧${e.n}</span>`).join(' ');
+    const scoreColor=d._score>=70?'var(--grn)':d._score>=50?'var(--yel)':'var(--org)';
+    return `
+    <div class="db-card" id="dbc-${d.code}" onclick="openPanel('${d.code}')">
+      <div class="db-card-head">
+        <span style="font-family:var(--mono);font-size:9.5px;color:var(--txt3);min-width:16px">${i+1}</span>
+        <span class="db-name">${d.name}</span>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${scoreColor}">${d._score}</span>
+      </div>
+      <div class="db-meta">
+        📍 ${d.region} · ${d.dist===0?'기준점':d.dist+'km/'+d.time}
+        &nbsp;${stB}
+        ${d.certs?.slice(0,2).map(c=>`<span class="badge b-g" style="font-size:8px">${c}</span>`).join('')||''}
+        ${eqB}
+      </div>
+      ${eqNames?`<div class="db-equip-list">${eqNames}</div>`:''}
+      <div class="db-tags">
+        ${allF.slice(0,4).map(f=>`<span class="chip-f">${f}</span>`).join('')}
+        ${d.plt?d.plt.split('+').map(p=>`<span class="badge b-c" style="font-size:8px">${p}</span>`).join(''):''}
+      </div>
+      <div class="db-bar"><div class="db-bar-f" style="width:${d._score}%;background:${scoreColor}"></div></div>
+      <div class="db-foot">
+        <span>신뢰도 ${d._score}점</span>
+        <span style="color:var(--cyn)">CAPA: ${d.capa>0?Math.round(d.capa/10000)+'만':'미확인'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function sortC1(mode){
+  if(mode==='match') _c1results.sort((a,b)=>b._score-a._score);
+  else if(mode==='trust') _c1results.sort((a,b)=>b.trust-a.trust);
+  else if(mode==='dist') _c1results.sort((a,b)=>a.dist-b.dist);
+  renderC1(_c1results);
+}
+
+/* ══════════════════════════════════════
+   Col2: 유사제품 역추적
+   callAI() 추상화 레이어 사용
+══════════════════════════════════════ */
+const C2_SYS=`당신은 화장품 제조업 소싱 전문가입니다. 국내 시중 유사제품과 제조판매원을 정확히 조사합니다.
+제조사가 불확실하면 반드시 null로 표기하세요. 절대 추측 금지.
+반드시 순수 JSON만 응답 (마크다운 없이):
+{"similar_forms":["유사제형1","유사제형2","유사제형3"],"products":[{"rank":1,"name":"제품명","brand":"브랜드명","mfr":"제조판매원 또는 null","confidence":"high/mid/low","source_url":"실제URL 또는 null","source_type":"product_page/blog/shopping/mfds","tag":"태그","search_query":"검색 쿼리"}]}
+confidence: high=식약처/공식확인, mid=라벨/블로그 추정, low=미확인. 최대 10개 반환`;
+
+async function runC2(){
+  if(!ANTHROPIC_API_KEY){
+    document.getElementById('c2-api-warn').classList.add('show');
+    document.getElementById('c2-body').innerHTML=
+      `<div style="padding:16px;text-align:center">
+        <div style="font-size:28px;margin-bottom:10px">🔑</div>
+        <div style="font-size:11.5px;font-weight:700;color:var(--navy);margin-bottom:6px">API 키가 필요합니다</div>
+        <div style="font-size:10.5px;color:var(--txt2);line-height:1.7">
+          🎛 <b>필터 패널</b> 하단에서<br>Anthropic API 키를 입력하세요
+        </div>
+        <button class="tbtn pur" style="margin-top:10px" onclick="toggleFp()">🎛 필터 패널 열기</button>
+      </div>`;
+    return;
+  }
+  document.getElementById('c2-api-warn').classList.remove('show');
+  document.getElementById('c2-body').innerHTML=
+    `<div class="ai-load"><span class="spin"></span> Claude AI 유사제품 분석 중...
+    <div class="ai-steps">① 시중 제품 제조판매원 추적<br>② 인디브랜드 라벨 역추적<br>③ OEM 실무 정보 수집</div></div>`;
+  document.getElementById('c2-cnt').textContent='…';
+  const kw=S.canonical||S.keyword;
+  const aliases=S.aliases.slice(0,5).join(', ');
+  const urlRef=document.getElementById('si-url').value.trim();
+  const userMsg=`탐색 대상: ${kw}\n동의어: ${aliases||'없음'}\n${urlRef?'참고URL: '+urlRef:''}\n\n이 제형으로 만들어진 국내 시중 제품 최대 10개를 찾아주세요.\n- 대형 브랜드뿐 아니라 인디/니치 브랜드 포함\n- 화장품제조업 등록 제조사 우선\n- 대형3사(한국콜마/코스맥스/코스메카) 외 전문업체 우선\n- 각 제품마다 실제 검색 가능한 URL 또는 검색 쿼리 포함`;
+  try{
+    const raw = await callAI(C2_SYS, userMsg, 1000);
+    let parsed;
+    try{parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());}
+    catch(e){parsed=null;}
+    if(parsed?.products){
+      renderC2(parsed);
+    }else{
+      document.getElementById('c2-cnt').textContent='?';
+      document.getElementById('c2-info').textContent='AI 응답 (텍스트)';
+      document.getElementById('c2-body').innerHTML=
+        `<div style="padding:12px;font-size:11px;color:var(--txt2);line-height:1.9;white-space:pre-wrap">${raw}</div>`;
+    }
+  }catch(e){
+    const isKeyMissing = e.message==='API_KEY_MISSING';
+    document.getElementById('c2-body').innerHTML=
+      `<div style="padding:12px;color:var(--org);font-size:11px">
+        ⚠ ${isKeyMissing?'API 키를 입력하세요':'API 오류: '+e.message}<br><br>
+        <button class="tbtn pri" onclick="runC2()">↩ 재시도</button>
+        ${isKeyMissing?`<button class="tbtn pur" style="margin-left:4px" onclick="toggleFp()">🎛 키 설정</button>`:''}
+      </div>`;
+  }
+}
+
+function renderC2(data){
+  const prods=(data.products||[]).slice(0,10);
+  const simF=data.similar_forms||[];
+  document.getElementById('c2-cnt').textContent=prods.length;
+  document.getElementById('c2-info').textContent=`${prods.length}건 · AI 분석`;
+  const confMap={high:['✅ 확인','ch','mfr-h'],mid:['🔶 추정','cm','mfr-m'],low:['❓ 미확인','cl','mfr-l']};
+  const srcMap={product_page:['제품페이지','src-page'],blog:['블로그','src-blog'],shopping:['쇼핑몰','src-shop'],mfds:['식약처','src-mfds']};
+  let html='';
+  if(simF.length){
+    html+=`<div style="padding:6px 12px;background:#f0eeff;border-bottom:1px solid #c0a0e0;font-size:10px;color:var(--pur)">
+      💡 유사 제형: ${simF.map(f=>`<span style="background:#e8e0ff;padding:1px 6px;border-radius:3px;margin-left:3px">${f}</span>`).join('')}
+    </div>`;
+  }
+  html+=prods.map((p,i)=>{
+    const [cL,cC,mC]=confMap[p.confidence]||confMap.low;
+    const [sL,sC]=srcMap[p.source_type]||['—',''];
+    const dbM=p.mfr?DB.find(d=>
+      d.name.replace(/[()주식회사㈜\s]/g,'').includes((p.mfr||'').replace(/[()주식회사㈜\s]/g,'').slice(0,5))
+    ):null;
+    const navQuery=p.search_query||`${p.name} ${p.brand||''} 화장품 제조판매원`;
+    const navUrl=`https://search.naver.com/search.naver?query=${encodeURIComponent(navQuery)}`;
+    const googleUrl=`https://www.google.com/search?q=${encodeURIComponent(navQuery)}`;
+    const btn=p.mfr
+      ?(dbM?`<button class="pb pb-db" onclick="openPanel('${dbM.code}')">🗃 DB</button>`
+          :`<button class="pb pb-add" onclick="showToast('식약처 단건조회 → 신규등록')">➕ 등록</button>`)
+      :`<button class="pb pb-src" onclick="window.open('${navUrl}','_blank')">🔍 검색</button>`;
+    return `<div class="prod-card" data-c="${p.confidence}">
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div class="prod-rank ${i<3?'top3':''}">${p.rank}</div>
+        <div style="flex:1;min-width:0">
+          <div class="prod-name">${p.name}</div>
+          <div class="prod-brand">브랜드: ${p.brand||'—'}</div>
+          <div class="prod-mfr">제조판매원: <span class="${mC}">${p.mfr||'미확인'}</span>
+            <span class="conf-b ${cC}">${cL}</span>
+            ${p.tag?`<span class="badge b-n" style="font-size:8px">${p.tag}</span>`:''}
+          </div>
+          <div class="prod-src"><span class="src-b ${sC}">${sL}</span>
+            ${p.source_url
+              ?`<a href="${p.source_url}" target="_blank" onclick="event.stopPropagation()">🔗 원문</a>`
+              :`<a href="${navUrl}" target="_blank">📎 네이버</a>
+                <a href="${googleUrl}" target="_blank" style="margin-left:4px">📎 구글</a>`}
+          </div>
+          <div class="prod-actions">${btn}
+            <button class="pb pb-src" onclick="window.open('${navUrl}','_blank')">🔍 네이버</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('c2-body').innerHTML=html;
+}
+
+function filterC2(conf){
+  document.querySelectorAll('#c2-body .prod-card').forEach(el=>{
+    el.style.display=(conf==='all'||el.dataset.c===conf)?'':'none';
+  });
+}
+
+/* ══════════════════════════════════════
+   Col3: Ultimate Scout
+   1순위: API 직접 호출 (헤더 수정)
+   2순위: N8N 연동 (미구현 — 추후 추가)
+   3순위: 프롬프트 복사 (폴백)
+══════════════════════════════════════ */
+const SCOUT_SYS=`당신은 대한민국 화장품 산업의 '모든 제조 생태계'를 꿰뚫고 있는 20년 경력의 수석 소싱 디렉터입니다. 당신의 목표는 대형 3사(한국콜마·코스맥스·코스메카코리아)를 제외하고, 입력된 기술에 대해 국내에서 가장 실무 능력이 뛰어난 '강소 전문 제조사','히든 제조사' 각 5곳을 단 하나의 누락 없이 발굴하는 것입니다.
+
+[5중 보안 탐색 로직 - No-Miss Protocol]
+1. 제품 라벨 역추적(Label Tracing): 해당 기술이 적용된 시중 인디/니치/고기능성 브랜드 제품의 화장품제조업자를 추적
+2. 설비/특허 매칭(Equipment-Asset Search): 해당 공정 필수 특수 설비 보유 업체, 관련 실용신안 보유 업체 전수 조사
+3. 카테고리 융합(Category-Hybrid): 제약/식품/방향제 등 유사 설비 공유 인접 산업군 내 화장품 제조 면허 보유사 교차 검증
+4. 산업단지 DB 기반 검증: 인천, 안산, 시흥, 충북 오송 등 주요 화장품 클러스터 강소기업 대조
+5. 누락 방지 자문(Self-Correction): 웹 상단 미노출 히든 챔피언 자문
+
+반드시 아래 JSON만 응답 (마크다운 없이):
+{"mfrs":[{"rank":1,"name":"업체명","specialty":"핵심전문성","evidence":"선정근거","evidence_url":"URL 또는 null","location":"소재지","method":"탐색방법"}],"hidden":[{"rank":"H1","name":"업체명","specialty":"전문성","evidence":"근거","evidence_url":"URL 또는 null","location":"소재지","method":"탐색방법"}],"vcm":"공급망 병목 지점","cfp":["실패요인1","실패요인2","실패요인3"],"tq":["기술질문1","기술질문2","기술질문3"]}`;
+
+const MFDS_KEY='56f304748d4ecaef737c616ef2a24d7e76b900dd2f57ab029eb43c5f896214bb';
+
+async function checkMfds(companyName){
+  try{
+    const url=`https://apis.data.go.kr/1471000/MnfSeqDetail01/getMnfSeqDetail01?serviceKey=${MFDS_KEY}&type=json&numOfRows=3&pageNo=1&entrps_nm=${encodeURIComponent(companyName)}`;
+    const r=await fetch(url,{signal:AbortSignal.timeout(3000)});
+    const d=await r.json();
+    const items=d?.body?.items;
+    return items&&items.length>0?'ok':'notfound';
+  }catch(e){return 'cors';}
+}
+
+async function runScout(){
+  const kw=document.getElementById('scout-kw').value.trim()||S.canonical||S.keyword;
+  if(!kw){showToast('⚠ 키워드를 입력하세요');return;}
+
+  // API 키 없으면 프롬프트 복사로 안내
+  if(!ANTHROPIC_API_KEY){
+    document.getElementById('c3-api-warn').classList.add('show');
+    document.getElementById('c3-body').innerHTML=
+      `<div style="padding:14px;text-align:center">
+        <div style="font-size:28px;margin-bottom:8px">🔑</div>
+        <div style="font-size:11.5px;font-weight:700;color:var(--navy);margin-bottom:6px">API 키 미설정</div>
+        <div style="font-size:10.5px;color:var(--txt2);line-height:1.8;margin-bottom:10px">
+          🎛 필터 패널 하단에서 API 키 입력 후 Scout 실행<br>
+          또는 아래 프롬프트 복사 후 Claude.ai에서 직접 사용
+        </div>
+        <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+          <button class="tbtn pur" onclick="toggleFp()">🎛 키 입력</button>
+          <button class="tbtn" onclick="copyPrompt('claude')">📋 Claude용 복사</button>
+          <button class="tbtn" onclick="copyPrompt('gpt')">📋 GPT용 복사</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('c3-api-warn').classList.remove('show');
+  const btn=document.getElementById('scout-run-btn');
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> 탐색 중...';
+  document.getElementById('c3-body').innerHTML=
+    `<div class="ai-load"><span class="spin"></span> 5중 보안 탐색 로직 실행 중...
+    <div class="ai-steps">① 라벨 역추적 ② 설비/특허 매칭<br>③ 카테고리 융합 ④ 산단 DB<br>⑤ 누락 방지 자문</div></div>`;
+  document.getElementById('c3-cnt').textContent='…';
+  const aliases=S.aliases.slice(0,6).join(', ');
+  const userMsg=`타겟 제품/기술: ${kw}\n동의어/유사표현: ${aliases||'없음'}\n필수 조건: 화장품제조업 등록 공장 (단순 부자재/유통사 엄격 제외)\n제외: 대형 3사 (한국콜마, 코스맥스, 코스메카코리아)\n\n강소 전문 제조사 5곳 + 히든 제조사 5곳을 5중 보안 탐색 로직으로 발굴해주세요.`;
+  try{
+    const raw = await callAI(SCOUT_SYS, userMsg, 1000);
+    let parsed;
+    try{parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());}
+    catch(e){parsed=null;}
+    if(parsed?.mfrs){
+      for(const m of[...(parsed.mfrs||[]),...(parsed.hidden||[])]){
+        checkMfds(m.name).then(status=>{
+          m._mfds=status;
+          const el=document.getElementById(`mfds-${m.rank}`);
+          if(el){
+            if(status==='ok'){el.textContent='🟢 식약처 확인';el.className='sc-mfds-check mfds-ok';}
+            else if(status==='notfound'){el.textContent='⚪ 미조회';el.className='sc-mfds-check mfds-unk';}
+          }
+        });
+      }
+      renderScout(parsed,kw);
+      document.getElementById('c3-cnt').textContent=`${parsed.mfrs.length}+${parsed.hidden?.length||0}`;
+    }else{
+      document.getElementById('c3-body').innerHTML=
+        `<div style="padding:12px;font-size:11px;color:var(--txt2);line-height:1.9;white-space:pre-wrap">${raw}</div>`;
+      document.getElementById('c3-cnt').textContent='✓';
+    }
+  }catch(e){
+    const isKeyMissing = e.message==='API_KEY_MISSING';
+    document.getElementById('c3-body').innerHTML=
+      `<div style="padding:12px;color:var(--org);font-size:11px">
+        ⚠ ${isKeyMissing?'API 키를 입력하세요':'API 오류: '+e.message}<br><br>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="tbtn pur" onclick="runScout()">↩ 재시도</button>
+          ${isKeyMissing?`<button class="tbtn" onclick="toggleFp()">🎛 키 설정</button>`:''}
+          <button class="tbtn" onclick="copyPrompt('claude')">📋 프롬프트 복사</button>
+        </div>
+      </div>`;
+  }
+  btn.disabled=false;btn.innerHTML='▶ Scout 실행';
+}
+
+function renderScout(data,kw){
+  const mfrs=data.mfrs||[];
+  const hidden=data.hidden||[];
+  const rankCls=['r1','r2','r3','',''];
+  let html=`<div class="scout-sec-hd" style="background:var(--s2);color:var(--cyn)">■ 강소 전문 제조사 ${mfrs.length}곳</div>`;
+  html+=mfrs.map((m,i)=>{
+    const dbM=DB.find(d=>
+      d.name.replace(/[()주식회사㈜\s]/g,'').includes((m.name||'').replace(/[()주식회사㈜\s]/g,'').slice(0,4)));
+    return `<div class="scout-card">
+      <div class="sc-head">
+        <div class="sc-rank ${rankCls[i]||''}">${m.rank}</div>
+        <div style="flex:1">
+          <div class="sc-name">${m.name}${dbM?'<span class="badge b-g" style="font-size:8px;margin-left:4px">DB✓</span>':''}</div>
+          <div class="sc-loc">📍 ${m.location||'—'} · ${m.method||'—'}</div>
+          <div id="mfds-${m.rank}" class="sc-mfds-check mfds-unk">⏳ 식약처 확인 중...</div>
+        </div>
+      </div>
+      <div class="sc-sp">${m.specialty||'—'}</div>
+      <div class="sc-ev">${m.evidence||'—'}</div>
+      <div class="sc-acts">
+        ${dbM?`<button class="tbtn grn" style="font-size:9px" onclick="openPanel('${dbM.code}')">🗃 DB</button>`:''}
+        <button class="tbtn" style="font-size:9px" onclick="showToast('식약처 단건조회')">🔍 식약처</button>
+        ${m.evidence_url?`<button class="tbtn cyn" style="font-size:9px" onclick="window.open('${m.evidence_url}','_blank')">🔗 근거</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  if(hidden.length){
+    html+=`<div class="scout-sec-hd" style="background:#f0e8ff;color:var(--pur)">■ 히든 제조사 ${hidden.length}곳 (Self-Correction 발굴)</div>`;
+    html+=hidden.map(m=>{
+      const dbM=DB.find(d=>
+        d.name.replace(/[()주식회사㈜\s]/g,'').includes((m.name||'').replace(/[()주식회사㈜\s]/g,'').slice(0,4)));
+      return `<div class="scout-card" style="background:#fdf8ff">
+        <div class="sc-head">
+          <div class="sc-rank" style="font-size:16px;color:var(--pur)">${m.rank}</div>
+          <div style="flex:1">
+            <div class="sc-name" style="color:var(--pur)">${m.name}${dbM?'<span class="badge b-g" style="font-size:8px;margin-left:4px">DB✓</span>':''}</div>
+            <div class="sc-loc">📍 ${m.location||'—'} · ${m.method||'—'}</div>
+            <div id="mfds-${m.rank}" class="sc-mfds-check mfds-unk">⏳ 식약처 확인 중...</div>
+          </div>
+        </div>
+        <div class="sc-sp" style="background:rgba(80,64,160,.07);color:var(--pur)">${m.specialty||'—'}</div>
+        <div class="sc-ev">${m.evidence||'—'}</div>
+        <div class="sc-acts">
+          ${dbM?`<button class="tbtn pur" style="font-size:9px" onclick="openPanel('${dbM.code}')">🗃 DB</button>`:''}
+          <button class="tbtn" style="font-size:9px" onclick="showToast('식약처 조회')">🔍 식약처</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  if(data.vcm||data.cfp||data.tq){
+    html+=`<div class="cl-box">
+      <div class="cl-hd">📋 전문가 체크리스트 — ${kw}</div>
+      ${data.vcm?`<div style="margin-bottom:8px"><div class="cl-sec-hd">🗺 공급망 병목 지점</div><div class="cl-item">${data.vcm}</div></div>`:''}
+      ${data.cfp?.length?`<div style="margin-bottom:8px"><div class="cl-sec-hd">⚠ 치명적 실패 요인</div>${data.cfp.map(p=>`<div class="cl-item">• ${p}</div>`).join('')}</div>`:''}
+      ${data.tq?.length?`<div><div class="cl-sec-hd">🔧 기술 검증 질문</div>${data.tq.map(q=>`<div class="cl-item">Q. ${q}</div>`).join('')}</div>`:''}
+    </div>`;
+  }
+  document.getElementById('c3-body').innerHTML=html;
+}
+
+/* ══════════════════════════════════════
+   Claude.ai 반자동 열기 (API 키 없을 때 대체)
+   프롬프트 복사 + 새탭 동시 오픈
+══════════════════════════════════════ */
+function openClaudeAi(){
+  const kw=document.getElementById('scout-kw').value.trim()||S.canonical||S.keyword;
+  if(!kw){showToast('⚠ 먼저 검색 키워드를 입력하세요');return;}
+  copyPrompt('claude');
+  setTimeout(()=>window.open('https://claude.ai','_blank'),300);
+  showToast('📋 프롬프트 복사 완료 — Claude.ai에서 붙여넣기(Ctrl+V)');
+}
+
+/* ══════════════════════════════════════
+   프롬프트 복사 (폴백)
+══════════════════════════════════════ */
+function copyPrompt(type){
+  const kw=document.getElementById('scout-kw').value.trim()||S.canonical||S.keyword;
+  if(!kw){showToast('⚠ 먼저 검색 실행');return;}
+  const aliases=S.aliases.slice(0,6).join(', ');
+  const body=`## [1. 입력 정보]
+- **타겟 제품/기술:** ${kw}
+- **동의어/유사 표현:** ${aliases||'없음'}
+- **필수 조건:** 반드시 '화장품제조업' 등록 공장일 것 (단순 부자재/유통사 엄격 제외)
+
+## [2. 5중 보안 탐색 로직 (No-Miss Protocol)]
+1. **제품 라벨 역추적(Label Tracing):** 해당 기술이 적용된 시중 인디/니치/고기능성 브랜드 제품의 '화장품제조업자'를 추적
+2. **설비/특허 매칭(Equipment-Asset Search):** 해당 공정에 필수적인 특수 설비 보유 업체, 관련 실용신안 보유 업체 전수 조사
+3. **카테고리 융합(Category-Hybrid):** 제약/식품 등 유사 설비 공유 인접 산업군 내 화장품 면허 보유사 교차 검증
+4. **산업 단지 DB 기반 검증:** 인천, 안산, 시흥, 충북 오송 등 주요 화장품 클러스터 강소기업 대조
+5. **누락 방지 자문(Self-Correction):** 웹 상단 미노출 히든 챔피언 자문
+
+## [3. 출력 형식]
+### ■ [${kw}] 생산 최적화 제조사 리포트
+| 순위 | 업체명 | 핵심 전문성 | 선정 근거 | 근거 URL | 비고 |
+|:---:|:---|:---|:---|:---|:---|
+| 1~5 | 강소 전문 제조사 5곳 | | | | |
+
+### ■ 히든 제조사 5곳 (Self-Correction 발굴)
+| 순위 | 업체명 | 핵심 전문성 | 발굴 경위 | 근거 URL | 소재지 |
+
+## [4. 전문가 실무 제언]
+1. 공급망 병목 지점 설명
+2. 업체 선정 시 치명적 실패 요인 3가지
+3. 업체 미팅 시 기술 검증 질문 3가지`;
+
+  const prompt=`# [The Ultimate Cosmetic Manufacturing Scout - No Oversight]\n당신은 대한민국 화장품 산업의 '모든 제조 생태계'를 꿰뚫고 있는 20년 경력의 수석 소싱 디렉터입니다. 대형 3사를 제외하고, 강소·히든 제조사 각 5곳을 발굴하세요.\n\n${body}`;
+
+  navigator.clipboard?.writeText(prompt)
+    .then(()=>showToast(`📋 ${type==='claude'?'Claude':'ChatGPT'}용 복사됨 (${prompt.length}자)`))
+    .catch(()=>{showToast('⚠ 복사 실패 — 콘솔 확인');console.log(prompt);});
+}
+
+/* ══════════════════════════════════════
+   우측 슬라이드 패널 (상세보기)
+══════════════════════════════════════ */
+function openPanel(code){
+  const d=DB.find(x=>x.code===code);
+  if(!d) return;
+  S.activeCode=code;
+  document.getElementById('slide-panel').classList.add('open');
+  document.getElementById('main').classList.add('panel-open');
+  document.querySelectorAll('.db-card').forEach(c=>c.classList.remove('active'));
+  document.getElementById(`dbc-${code}`)?.classList.add('active');
+  const stH=d.status==='CONFIRMED'
+    ?'<span class="badge b-g">✓ CONFIRMED</span>'
+    :'<span class="badge b-n">SHADOW</span>';
+  document.getElementById('sp-name').textContent=d.name;
+  document.getElementById('sp-sub').innerHTML=
+    `${d.region} · 📍${d.dist===0?'기준점':d.dist+'km / '+d.time} · ${stH}`;
+  const score=d._score||calcMatchScore(d,S.equip_keys);
+  const scoreColor=score>=70?'var(--grn)':score>=50?'var(--yel)':'var(--org)';
+  const reasons=[];
+  if(d._eHits?.length>0) reasons.push(`✅ 설비 직접 매칭 (${d._eHits.map(e=>e.n).join(', ')})`);
+  if(d.dist<=50) reasons.push('✅ 50km 이내 근거리');
+  if(d.certs?.includes('CGMP')) reasons.push('✅ CGMP 인증');
+  if(d.trust>=70) reasons.push('✅ 파트너지수 우수');
+  if(!reasons.length) reasons.push('ℹ 기본 조건 충족');
+  const allF=Object.values(d.forms||{}).flat();
+  const eqHtml=d.equip?.length
+    ?`<table class="eq-tbl"><thead><tr><th>설비명</th><th>CAPA</th></tr></thead><tbody>
+        ${d.equip.map(e=>`<tr><td style="font-weight:600">${e.n}</td><td style="color:var(--cyn)">${e.c}</td></tr>`).join('')}
+      </tbody></table>`
+    :'<span style="color:var(--txt3);font-size:11px">설비 정보 없음</span>';
+  document.getElementById('sp-body').innerHTML=`
+    <div class="sp-sec">
+      <div class="sp-sec-hd">🎯 신뢰도 / 매칭 적합도</div>
+      <div class="match-wrap">
+        <div class="match-circle" style="border-color:${scoreColor}">
+          <div class="match-n" style="color:${scoreColor}">${score}</div>
+          <div class="match-l">신뢰도</div>
+        </div>
+        <div class="match-reasons">${reasons.join('<br>')}</div>
+      </div>
+      ${[['설비매칭',d._eHits?.length>0?40:0,40,'var(--cyn)'],
+         ['파트너지수',Math.round((d.trust/100)*30),30,'var(--pur)'],
+         ['물류거리',d.dist===0?20:d.dist<=50?18:d.dist<=100?12:7,20,'var(--grn)'],
+         ['인증',d.certs?.includes('CGMP')?7:0,10,'var(--yel)'],
+      ].map(([l,v,mx,col])=>`
+        <div class="score-bar-row">
+          <span class="score-bar-lbl">${l}</span>
+          <div class="score-bar-track"><div class="score-bar-fill" style="width:${Math.round(v/mx*100)}%;background:${col}"></div></div>
+          <span class="score-bar-val" style="color:${col}">${v}/${mx}</span>
+        </div>`).join('')}
+    </div>
+    <div class="sp-sec">
+      <div class="sp-sec-hd">📋 기본 정보</div>
+      <div class="sp-kv">
+        <div class="sp-kvi"><div class="sp-kv-lbl">대표자</div><div class="sp-kv-val">${d.ceo||'—'}</div></div>
+        <div class="sp-kvi"><div class="sp-kv-lbl">파트너지수</div><div class="sp-kv-val" style="color:${scoreColor}">${d.trust}</div></div>
+        <div class="sp-kvi"><div class="sp-kv-lbl">월 CAPA</div><div class="sp-kv-val" style="font-size:10.5px">${d.capa>0?Math.round(d.capa/10000)+'만개':'미확인'}</div></div>
+        <div class="sp-kvi"><div class="sp-kv-lbl">거리/시간</div><div class="sp-kv-val" style="color:${dc(d.dist)};font-size:11px">${d.dist===0?'기준점':d.dist+'km'} / ${d.time}</div></div>
+        <div class="sp-kvi full"><div class="sp-kv-lbl">주소</div><div class="sp-kv-val" style="font-size:10.5px;font-weight:400">${d.addr}</div></div>
+      </div>
+    </div>
+    <div class="sp-sec">
+      <div class="sp-sec-hd">🏆 인증</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${d.certs?.length?d.certs.map(c=>`<span class="badge b-g" style="font-size:10px;padding:2px 8px">${c}</span>`).join(''):'<span style="color:var(--txt3);font-size:11px">없음</span>'}
+      </div>
+    </div>
+    <div class="sp-sec">
+      <div class="sp-sec-hd">💧 가능 제형</div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px">
+        ${allF.length?allF.map(f=>{
+          const isMatch=[S.canonical,...S.aliases].some(sf=>f.toLowerCase().includes(sf.toLowerCase())||sf.toLowerCase().includes(f.toLowerCase()));
+          return `<span class="${isMatch?'chip-f':'badge b-n'}" style="font-size:9.5px">${f}${isMatch?' ✓':''}</span>`;
+        }).join(''):'<span style="color:var(--txt3);font-size:11px">정보 없음</span>'}
+      </div>
+    </div>
+    <div class="sp-sec">
+      <div class="sp-sec-hd">⚙ 보유 설비</div>
+      ${eqHtml}
+    </div>
+    <div class="sp-sec">
+      <div class="sp-sec-hd">📦 파렛트</div>
+      <div style="display:flex;gap:5px">
+        ${d.plt?d.plt.split('+').map(p=>`<span class="badge b-c" style="font-size:10px;padding:3px 9px">${p}</span>`).join(''):'<span style="color:var(--txt3)">—</span>'}
+      </div>
+    </div>`;
+}
+
+function closePanel(){
+  document.getElementById('slide-panel').classList.remove('open');
+  document.getElementById('main').classList.remove('panel-open');
+  if(S.activeCode){
+    document.getElementById(`dbc-${S.activeCode}`)?.classList.remove('active');
+    S.activeCode=null;
+  }
+}
+
+/* ══ 초기화 ══ */
+renderCatGrid();
+</script>
+</body>
+</html>
