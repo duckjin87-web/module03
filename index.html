@@ -510,18 +510,27 @@ function renderMfr(data){
     document.getElementById('c2-body').innerHTML=`<div class="empty"><div class="ei">🏭</div><div class="et">검색결과에서 업체를 찾지 못함</div><div class="es">${data.note==='NO_SEARCH_RESULTS'?'네이버 검색결과 자체가 없었습니다':'검색은 됐지만 업체로 특정되지 않았습니다'}<br>키워드를 바꿔 재시도해보세요</div></div>`;
     return;
   }
-  document.getElementById('c2-info').textContent=`${cands.length}건 · 검색결과 근거`;
+  const makers=cands.filter(m=>m.entity_type==='maker').length;
+  document.getElementById('c2-info').textContent=`${cands.length}건 (제조사 ${makers}) · 검색결과 근거`;
   const canonical=S.confirmed.canonical;
+  const typeBadge={
+    maker:'<span class="badge b-g">🏭 제조사</span>',
+    broker:'<span class="badge b-y">🔁 대행/유통</span>',
+    unknown:'<span class="badge b-n">❓ 유형불명</span>'
+  };
   document.getElementById('c2-body').innerHTML=cands.map((m,i)=>{
     const scoreCls = m.capability_score>=70?'ch':m.capability_score>=40?'cm':'cl';
-    upsertFpEntry(canonical, {name:m.name, location:m.location, capability_score:m.capability_score, capability_note:m.capability_note, evidence_url:m.evidence_url, evidence_quote:m.evidence_quote, mfds:'unknown', source:'mfr'});
-    checkMfds(m.name, canonical);
-    return `<div class="res-card">
+    // 신규처(공장) 누적에는 실제 제조사(maker)만 승격 — 대행/유통은 오염 방지 위해 제외
+    if(m.entity_type==='maker'){
+      upsertFpEntry(canonical, {name:m.name, location:m.location, capability_score:m.capability_score, capability_note:m.capability_note, evidence_url:m.evidence_url, evidence_quote:m.evidence_quote, mfds:'unknown', source:'mfr'});
+      checkMfds(m.name, canonical);
+    }
+    return `<div class="res-card" style="${m.entity_type==='broker'?'opacity:.72':''}">
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="res-rank ${i<3?'top3':''}">${i+1}</div>
         <div style="flex:1;min-width:0">
           <div class="res-name">${m.name}</div>
-          <div class="res-meta">📍 ${m.location||'—'} <span class="score-b ${scoreCls}">매칭 ${m.capability_score ?? '—'}</span></div>
+          <div class="res-meta">${typeBadge[m.entity_type]||typeBadge.unknown} 📍 ${m.location||'—'} <span class="score-b ${scoreCls}">매칭 ${m.capability_score ?? '—'}</span></div>
           <div class="res-quote">${m.capability_note||''}${m.evidence_quote?'<br>"'+m.evidence_quote+'"':''}</div>
           ${m.evidence_url?`<div class="res-src"><a href="${m.evidence_url}" target="_blank">🔗 근거 원문</a></div>`:''}
         </div>
@@ -565,18 +574,24 @@ function renderSimilar(data){
     document.getElementById('c3-body').innerHTML=`<div class="empty"><div class="ei">🛒</div><div class="et">유사제품을 찾지 못함</div><div class="es">${data.note==='NO_SEARCH_RESULTS'?'네이버 쇼핑검색결과 자체가 없었습니다':'키워드를 더 일반적으로 바꿔 재시도해보세요'}</div></div>`;
     return;
   }
-  document.getElementById('c3-info').textContent=`${prods.length}건 · 쇼핑검색 근거`;
-  const confMap={high:['✅ 라벨확인','ch'],mid:['🔶 추정','cm'],low:['❓ 미확인','cl']};
+  const withMfr=prods.filter(p=>p.manufacturer).length;
+  document.getElementById('c3-info').textContent=`${prods.length}건 (제조원 확인 ${withMfr}) · 쇼핑검색 근거`;
+  const confMap={high:['✅ 제조원 라벨확인','ch'],mid:['🔶 제조원 추정','cm'],low:['❓ 불확실','cl']};
   const canonical=S.confirmed.canonical;
   document.getElementById('c3-body').innerHTML=prods.map((p,i)=>{
-    const [cL,cC]=confMap[p.confidence]||confMap.low;
-    if(p.mfr && (p.confidence==='high'||p.confidence==='mid')){
-      upsertFpEntry(canonical, {name:p.mfr, evidence_quote:`유사제품 "${p.name}" 제조판매원으로 추출됨: ${p.evidence_quote||''}`, evidence_url:p.evidence_url||null, mfds:'unknown', source:'similar'});
-      checkMfds(p.mfr, canonical);
+    const [cL,cC]=confMap[p.manufacturer_confidence]||confMap.low;
+    // 신규처(공장) 누적에는 실제 제조원(공장)만 승격 — 책판(브랜드/유통)은 승격하지 않음
+    if(p.manufacturer && (p.manufacturer_confidence==='high'||p.manufacturer_confidence==='mid')){
+      upsertFpEntry(canonical, {name:p.manufacturer, evidence_quote:`유사제품 "${p.name}"의 제조원으로 확인됨: ${p.evidence_quote||''}`, evidence_url:p.evidence_url||null, mfds:'unknown', source:'similar'});
+      checkMfds(p.manufacturer, canonical);
     }
+    const mfrLine = p.manufacturer
+      ? `제조원(공장): <b style="color:var(--grn)">${p.manufacturer}</b> <span class="score-b ${cC}">${cL}</span>`
+      : `제조원(공장): <b style="color:var(--txt3)">미상</b> <span class="score-b cl">책판만 확인</span>`;
     return `<div class="res-card">
       <div class="res-name">${p.name}</div>
-      <div class="res-meta">브랜드: ${p.brand||'—'} · 제조판매원: <b>${p.mfr||'미확인'}</b> <span class="score-b ${cC}">${cL}</span></div>
+      <div class="res-meta">브랜드: ${p.brand||'—'} · 책판: ${p.seller||'—'}</div>
+      <div class="res-meta">${mfrLine}</div>
       ${p.evidence_quote?`<div class="res-quote">"${p.evidence_quote}"</div>`:''}
       ${p.evidence_url?`<div class="res-src"><a href="${p.evidence_url}" target="_blank">🔗 원문</a></div>`:''}
     </div>`;
