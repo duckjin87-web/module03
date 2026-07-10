@@ -425,6 +425,7 @@ function runC1Accum(){
         : '<span class="badge b-n">미확인</span>';
       const srcB = e.source==='manual' ? '<span class="badge b-y">📝 제보</span>'
         : e.source==='similar' ? '<span class="badge b-p">🛒 유사제품</span>'
+        : e.source==='mfds_report' ? '<span class="badge b-g">🟢 식약처 품목보고</span>'
         : '<span class="badge b-p">🏭 업체검색</span>';
       const crossB = (e.confirmedCount||1)>1 ? `<span class="badge b-g">✅ ${e.confirmedCount}회 교차확인</span>` : '';
       return `<div class="fc-card" onclick="openEntryPanel(${i})">
@@ -467,7 +468,7 @@ function openEntryPanel(i){
       <div class="sp-sec-hd">🎯 신뢰도</div>
       <div class="sp-kv">
         <div class="sp-kvi"><div class="sp-kv-lbl">교차확인</div><div class="sp-kv-val">${e.confirmedCount||1}회</div></div>
-        <div class="sp-kvi"><div class="sp-kv-lbl">출처</div><div class="sp-kv-val" style="font-size:10.5px">${e.source==='manual'?'직접 제보':e.source==='similar'?'유사제품 추출':'업체 검색'}</div></div>
+        <div class="sp-kvi"><div class="sp-kv-lbl">출처</div><div class="sp-kv-val" style="font-size:10.5px">${e.source==='manual'?'직접 제보':e.source==='similar'?'유사제품 추출':e.source==='mfds_report'?'식약처 품목보고':'업체 검색'}</div></div>
         <div class="sp-kvi"><div class="sp-kv-lbl">식약처</div><div class="sp-kv-val" style="font-size:10.5px">${e.mfds==='ok'?'🟢 확인':e.mfds==='notfound'?'⚪ 미등록':'미확인'}</div></div>
         <div class="sp-kvi"><div class="sp-kv-lbl">능력점수</div><div class="sp-kv-val" style="font-size:10.5px">${e.capability_score!=null?e.capability_score:'—'}</div></div>
       </div>
@@ -486,39 +487,82 @@ function closePanel(){
 /* ════════════════════════════════════════
    2단계: 화장품 제조업체 검색 (근거기반)
 ════════════════════════════════════════ */
+let _c2n={official:0,web:0};
+function updateC2Header(){
+  document.getElementById('c2-cnt').textContent=_c2n.official+_c2n.web;
+  document.getElementById('c2-info').textContent=`식약처 품목보고 ${_c2n.official} · 웹검색 ${_c2n.web}`;
+}
 async function runSearchMfr(){
-  const c=S.confirmed;
+  _c2n={official:0,web:0};
   document.getElementById('c2-api-warn').classList.remove('show');
-  document.getElementById('c2-body').innerHTML=`<div class="ai-load"><span class="spin"></span> 실제 검색 수행 중...
-    <div class="ai-steps">① 네이버 검색 실행<br>② 검색결과 내 업체 추출<br>③ 설비키워드 능력매칭</div></div>`;
+  document.getElementById('c2-body').innerHTML=`
+    <div class="scout-sec-hd" style="background:#f0eeff;color:var(--pur)">🟢 식약처 품목보고 (공식 · 최상위 근거)</div>
+    <div id="c2-official"><div class="ai-load"><span class="spin"></span> 품목보고 DB 조회 중...</div></div>
+    <div class="scout-sec-hd" style="background:var(--s2);color:var(--cyn)">🔎 웹 검색 (네이버 · 보조)</div>
+    <div id="c2-web"><div class="ai-load"><span class="spin"></span> 네이버 검색 중...</div></div>`;
   document.getElementById('c2-cnt').textContent='…';
+  runMfdsReport();
+  runNaverMfr();
+}
+async function runMfdsReport(){
+  const c=S.confirmed;
+  try{
+    const data = await api('/api/mfds-report', { query:c.canonical, search_keywords:c.search_keywords });
+    renderMfdsReport(data);
+  }catch(e){
+    document.getElementById('c2-official').innerHTML=`<div style="padding:8px 12px;font-size:10px;color:var(--txt3)">품목보고 조회 실패: ${e.message} (기능성화장품이 아니면 정상적으로 결과가 없을 수 있음)</div>`;
+  }
+}
+function renderMfdsReport(data){
+  const makers=data.makers||[];
+  _c2n.official=makers.length; updateC2Header();
+  const canonical=S.confirmed.canonical;
+  const el=document.getElementById('c2-official');
+  if(!makers.length){
+    el.innerHTML=`<div style="padding:8px 12px;font-size:10px;color:var(--txt3)">품목보고 매칭 없음 — 기능성화장품(미백/주름/자외선차단 등)이 아니거나, 품목명 표현이 달라 미매칭. 웹·유사제품 소스로 보완됩니다.</div>`;
+    return;
+  }
+  el.innerHTML=makers.map((m,i)=>{
+    // 정부 공식 품목보고 근거 → 실제 등록 제조원. 최상위 신뢰로 승격 + 식약처 확인 처리.
+    upsertFpEntry(canonical, {name:m.manufacturer, capability_note:`식약처 품목보고 ${m.product_count}건의 제조원 (예: ${(m.sample_items||[]).filter(Boolean).join(', ')||'—'})`, mfds:'ok', source:'mfds_report'});
+    return `<div class="res-card">
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div class="res-rank ${i<3?'top3':''}">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div class="res-name">${m.manufacturer} <span class="badge b-g">🟢 식약처 등록 제조원</span></div>
+          <div class="res-meta">보고품목 <b>${m.product_count}건</b>의 제조원 · 책판: ${(m.sellers||[]).join(', ')||'—'}</div>
+          <div class="res-quote">대표 품목: ${(m.sample_items||[]).filter(Boolean).join(' / ')||'—'}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  runC1Accum();
+}
+async function runNaverMfr(){
+  const c=S.confirmed;
   try{
     const data = await api('/api/search-mfr', { canonical:c.canonical, key_equipment:c.key_equipment, search_keywords:c.search_keywords });
     renderMfr(data);
   }catch(e){
-    document.getElementById('c2-api-warn').classList.add('show');
-    document.getElementById('c2-body').innerHTML=`<div style="padding:12px;color:var(--org);font-size:11px">
-      ⚠ 검색 실패: ${e.message}<br><br><button class="tbtn pri" onclick="runSearchMfr()">↩ 재시도</button></div>`;
-    document.getElementById('c2-cnt').textContent='!';
+    document.getElementById('c2-web').innerHTML=`<div style="padding:12px;color:var(--org);font-size:11px">
+      ⚠ 웹검색 실패: ${e.message}<br><br><button class="tbtn pri" onclick="runNaverMfr()">↩ 재시도</button></div>`;
   }
 }
 function renderMfr(data){
   const cands=(data.candidates||[]);
-  document.getElementById('c2-cnt').textContent=cands.length;
+  const makers=cands.filter(m=>m.entity_type==='maker').length;
+  _c2n.web=cands.length; updateC2Header();
   if(!cands.length){
-    document.getElementById('c2-info').textContent='0건 · 검색결과 내 업체 미발견';
-    document.getElementById('c2-body').innerHTML=`<div class="empty"><div class="ei">🏭</div><div class="et">검색결과에서 업체를 찾지 못함</div><div class="es">${data.note==='NO_SEARCH_RESULTS'?'네이버 검색결과 자체가 없었습니다':'검색은 됐지만 업체로 특정되지 않았습니다'}<br>키워드를 바꿔 재시도해보세요</div></div>`;
+    document.getElementById('c2-web').innerHTML=`<div style="padding:8px 12px;font-size:10px;color:var(--txt3)">${data.note==='NO_SEARCH_RESULTS'?'네이버 검색결과 자체가 없었습니다':'검색은 됐지만 업체로 특정되지 않았습니다'} — 키워드를 바꿔 재시도해보세요</div>`;
     return;
   }
-  const makers=cands.filter(m=>m.entity_type==='maker').length;
-  document.getElementById('c2-info').textContent=`${cands.length}건 (제조사 ${makers}) · 검색결과 근거`;
   const canonical=S.confirmed.canonical;
   const typeBadge={
     maker:'<span class="badge b-g">🏭 제조사</span>',
     broker:'<span class="badge b-y">🔁 대행/유통</span>',
     unknown:'<span class="badge b-n">❓ 유형불명</span>'
   };
-  document.getElementById('c2-body').innerHTML=cands.map((m,i)=>{
+  document.getElementById('c2-web').innerHTML=cands.map((m,i)=>{
     const scoreCls = m.capability_score>=70?'ch':m.capability_score>=40?'cm':'cl';
     // 신규처(공장) 누적에는 실제 제조사(maker)만 승격 — 대행/유통은 오염 방지 위해 제외
     if(m.entity_type==='maker'){
