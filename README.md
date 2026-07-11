@@ -11,6 +11,7 @@ CosmeDB — 화장품 OEM/ODM 소싱 검색엔진
    - `NAVER_CLIENT_SECRET`
    - `MFDS_KEY` (data.go.kr 일반 인증키 — 아래 두 API에 모두 "활용신청" 되어 있어야 함)
    - `MFDS_REPORT_KEY` (선택 — 품목보고 API용 키를 따로 쓸 경우. 없으면 `MFDS_KEY`를 재사용)
+   - `KV_REST_API_URL`, `KV_REST_API_TOKEN` (선택 — 팀 공유 신규처 저장소. Vercel Marketplace에서 Upstash Redis 연결 시 자동 주입됨. 없으면 브라우저 localStorage 폴백으로 동작)
 3. 재배포 후 `index.html`이 같은 도메인의 `/api/*` 함수를 호출합니다. API를 다른 도메인에 올렸다면 페이지 우측 상단 ⚙ 설정에서 API Base URL을 지정하세요.
 
 ## 구조
@@ -21,6 +22,14 @@ CosmeDB — 화장품 OEM/ODM 소싱 검색엔진
 - `api/search-similar.js` — 국내 유사제품 검색 (네이버 쇼핑 + Claude 추출)
 - `api/mfds-check.js` — 식약처(MFDS) 제조업 등록 여부 단건조회 (MnfSeqDetail01)
 - `api/mfds-report.js` — 식약처 기능성화장품 보고품목정보로 품목→제조원 역추출 (최상위 신뢰 소스, FtnltCosmRptPrdlstInfoService)
+- `api/vendors.js` — 팀 공유 신규처(제조원) 저장소. GET(canonical별 조회) / POST(업서트). 식별키: 사업자번호 > 식약처코드 > 정규화 업체명
+- `api/_kv.js` — Upstash Redis(Vercel KV) REST 헬퍼 (미구성 시 우아하게 비활성화)
+
+### 팀 공유 저장소 (Upstash Redis / Vercel KV)
+
+Vercel 프로젝트 → Storage → Marketplace에서 Upstash Redis(또는 Vercel KV)를 연결하면 `KV_REST_API_URL`/`KV_REST_API_TOKEN`이 자동으로 환경변수에 주입됩니다.
+연결하면 검색·제보로 발굴된 제조원이 브라우저가 아닌 서버에 누적되어 팀 전체가 공유하고, 같은 업체가 여러 의뢰·여러 사람에게서 재발견될수록 교차확인 카운트가 올라갑니다.
+연결하지 않아도 앱은 동작하며, 이 경우 각 브라우저의 localStorage에만 누적됩니다(팀 공유 아님).
 
 ### 참고: data.go.kr 활용신청
 

@@ -203,6 +203,7 @@ input,select,textarea{font-family:inherit;outline:none}
     </div>
     <div class="manual-form" id="manual-form">
       <input id="mr-name" placeholder="업체명 (필수)">
+      <input id="mr-biz" placeholder="사업자등록번호 (선택 · 중복방지 식별키로 사용)">
       <input id="mr-loc" placeholder="소재지">
       <input id="mr-sp" placeholder="전문 분야 / 보유설비">
       <input id="mr-note" placeholder="비고 (출처, 연락 경로 등)">
@@ -364,7 +365,7 @@ function toggleClsChip(kind, i, el){
   if(set.has(i)) set.delete(i); else set.add(i);
   el.classList.toggle('sel');
 }
-function confirmClassification(){
+async function confirmClassification(){
   const cls=S.cls;
   if(!cls) return;
   const canonical=document.getElementById('cls-canon-inp').value.trim()||cls.canonical;
@@ -377,48 +378,99 @@ function confirmClassification(){
     key_equipment: cls.key_equipment||[],
     search_keywords: [...new Set([canonical, ...(cls.search_keywords||[]), ...extraTypes])],
   };
+  await initSharedMode(canonical);
   runC1Accum();
   runSearchMfr();
   runSearchSimilar();
 }
 
 /* ════════════════════════════════════════
-   Fast Path 캐시 (localStorage) — 검색 결과 교차확인 누적
+   Fast Path 저장소 — 팀 공유(Upstash/Vercel KV) 우선, 미구성 시 localStorage 폴백
+   업체 식별키: 사업자번호 > 식약처코드 > 정규화 업체명 (표기흔들림/중복 오염 방지)
 ════════════════════════════════════════ */
-const FP_CACHE_KEY='cosmedb_fastpath_cache_v2';
+let _shared=null; // null=미확인, true=공유KV, false=로컬폴백
+function _normName(s){return (s||'').replace(/주식회사|유한회사|\(주\)|\(유\)|㈜/g,'').replace(/코리아|korea/gi,'').replace(/\s+/g,'').toLowerCase();}
+function _identity(v){
+  const biz=(v.biz_no||'').replace(/[^0-9]/g,''); if(biz.length>=10) return 'biz:'+biz;
+  const code=(v.mfds_code||'').toString().trim(); if(code) return 'mfds:'+code;
+  return 'name:'+_normName(v.name);
+}
+const FP_CACHE_KEY='cosmedb_fastpath_cache_v3';
 function loadFpCache(){ try{return JSON.parse(localStorage.getItem(FP_CACHE_KEY)||'{}');}catch(e){return {};} }
 function saveFpCache(c){ localStorage.setItem(FP_CACHE_KEY, JSON.stringify(c)); }
-function upsertFpEntry(canonical, entry){
+function upsertFpEntryLocal(canonical, entry, bump){
   if(!canonical || !entry.name) return;
   const cache=loadFpCache();
   if(!cache[canonical]) cache[canonical]={updatedAt:Date.now(),companies:[]};
   const list=cache[canonical].companies;
-  const idx=list.findIndex(c=>c.name===entry.name);
+  const id=_identity(entry);
+  const idx=list.findIndex(c=>(c.identity||_identity(c))===id);
   if(idx>=0){
-    list[idx].confirmedCount=(list[idx].confirmedCount||1)+1;
+    if(bump) list[idx].confirmedCount=(list[idx].confirmedCount||1)+1;
     Object.keys(entry).forEach(k=>{ if(entry[k]!=null && entry[k]!=='') list[idx][k]=entry[k]; });
+    list[idx].identity=id;
   } else {
-    list.push({...entry, confirmedCount:1, addedAt:Date.now()});
+    list.push({...entry, identity:id, confirmedCount:1, addedAt:Date.now()});
   }
   cache[canonical].updatedAt=Date.now();
   saveFpCache(cache);
 }
-function getFpEntries(canonical){ return loadFpCache()[canonical]?.companies || []; }
+function getFpEntriesLocal(canonical){ return loadFpCache()[canonical]?.companies || []; }
+
+async function initSharedMode(canonical){
+  if(_shared!==null) return;
+  try{
+    const r=await fetch(`${API_BASE}/api/vendors?canonical=${encodeURIComponent(canonical)}`);
+    const d=await r.json();
+    _shared=!!d.configured;
+  }catch(e){ _shared=false; }
+}
+async function serverUpsert(canonical, entries, bump){
+  const r=await fetch(`${API_BASE}/api/vendors`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canonical,entries,bump})});
+  const d=await r.json().catch(()=>({}));
+  if(d && d.configured===false){ _shared=false; throw new Error('KV_NOT_CONFIGURED'); }
+}
+// 통합 업서트: 여러 엔트리 저장 후 누적 화면 갱신 (공유 우선, 실패 시 로컬 폴백)
+function pushAndRefresh(canonical, entries, bump=true){
+  entries=(entries||[]).filter(e=>e && e.name);
+  if(!entries.length) return;
+  if(_shared===true){
+    serverUpsert(canonical, entries, bump)
+      .catch(()=>{ entries.forEach(e=>upsertFpEntryLocal(canonical,e,bump)); })
+      .finally(()=>runC1Accum());
+  } else {
+    entries.forEach(e=>upsertFpEntryLocal(canonical,e,bump));
+    runC1Accum();
+  }
+}
 
 let _fpEntries=[];
-function runC1Accum(){
+async function runC1Accum(){
   const canonical=S.confirmed?.canonical||S.cls?.canonical;
   if(!canonical) return;
-  _fpEntries=getFpEntries(canonical).slice().sort((a,b)=>(b.confirmedCount||0)-(a.confirmedCount||0));
+  let entries;
+  if(_shared===true){
+    try{
+      const r=await fetch(`${API_BASE}/api/vendors?canonical=${encodeURIComponent(canonical)}`);
+      const d=await r.json();
+      if(d.configured){ entries=d.vendors||[]; }
+      else { _shared=false; entries=getFpEntriesLocal(canonical); }
+    }catch(e){ entries=getFpEntriesLocal(canonical); }
+  } else {
+    entries=getFpEntriesLocal(canonical);
+  }
+  entries=entries.slice().sort((a,b)=>(b.confirmedCount||0)-(a.confirmedCount||0));
+  _fpEntries=entries;
   document.getElementById('c1-cnt').textContent=_fpEntries.length;
   const el=document.getElementById('fp-accum');
   if(!el) return;
+  const store = _shared ? '🌐 팀 공유' : '💾 로컬';
   if(!_fpEntries.length){
     el.innerHTML=`<div class="empty"><div class="ei">🆕</div><div class="et">아직 누적된 업체 없음</div>
-      <div class="es">검색 결과가 들어오면 자동으로 누적됩니다<br>📝 제보 등록으로 직접 추가도 가능</div></div>`;
+      <div class="es">검색 결과가 들어오면 자동으로 누적됩니다 (${store})<br>📝 제보 등록으로 직접 추가도 가능</div></div>`;
     return;
   }
-  el.innerHTML=`<div style="padding:6px 12px;font-size:9.5px;font-weight:700;color:var(--txt3);border-top:1px solid var(--bd)">🆕 발굴 누적 (${_fpEntries.length})</div>` +
+  el.innerHTML=`<div style="padding:6px 12px;font-size:9.5px;font-weight:700;color:var(--txt3);border-top:1px solid var(--bd)">🆕 발굴 누적 (${_fpEntries.length}) · ${store}</div>` +
     _fpEntries.map((e,i)=>{
       const mfdsB = e.mfds==='ok' ? '<span class="badge b-g">🟢 식약처 확인</span>'
         : e.mfds==='notfound' ? '<span class="badge b-n">⚪ 미등록</span>'
@@ -445,16 +497,16 @@ function submitManualReport(){
   if(!name){showToast('⚠ 업체명을 입력하세요');return;}
   const canonical=S.confirmed?.canonical||S.cls?.canonical;
   if(!canonical){showToast('⚠ 먼저 분류 분석을 실행하세요');return;}
-  upsertFpEntry(canonical,{
-    name, location: document.getElementById('mr-loc').value.trim(),
+  const biz=document.getElementById('mr-biz').value.trim();
+  pushAndRefresh(canonical,[{
+    name, biz_no:biz||null, location: document.getElementById('mr-loc').value.trim(),
     capability_note: document.getElementById('mr-sp').value.trim(),
     evidence_quote: document.getElementById('mr-note').value.trim(),
     mfds:'unknown', source:'manual'
-  });
-  ['mr-name','mr-loc','mr-sp','mr-note'].forEach(id=>document.getElementById(id).value='');
+  }]);
+  ['mr-name','mr-biz','mr-loc','mr-sp','mr-note'].forEach(id=>document.getElementById(id).value='');
   toggleManualForm(false);
   showToast('📝 제보 등록 완료 — 발굴 누적에 반영됨');
-  runC1Accum();
 }
 function openEntryPanel(i){
   const e=_fpEntries[i];
@@ -522,9 +574,9 @@ function renderMfdsReport(data){
     el.innerHTML=`<div style="padding:8px 12px;font-size:10px;color:var(--txt3)">품목보고 매칭 없음 — 기능성화장품(미백/주름/자외선차단 등)이 아니거나, 품목명 표현이 달라 미매칭. 웹·유사제품 소스로 보완됩니다.</div>`;
     return;
   }
+  // 정부 공식 품목보고 근거 → 실제 등록 제조원. 최상위 신뢰로 승격 + 식약처 확인 처리.
+  pushAndRefresh(canonical, makers.map(m=>({name:m.manufacturer, capability_note:`식약처 품목보고 ${m.product_count}건의 제조원 (예: ${(m.sample_items||[]).filter(Boolean).join(', ')||'—'})`, mfds:'ok', source:'mfds_report'})));
   el.innerHTML=makers.map((m,i)=>{
-    // 정부 공식 품목보고 근거 → 실제 등록 제조원. 최상위 신뢰로 승격 + 식약처 확인 처리.
-    upsertFpEntry(canonical, {name:m.manufacturer, capability_note:`식약처 품목보고 ${m.product_count}건의 제조원 (예: ${(m.sample_items||[]).filter(Boolean).join(', ')||'—'})`, mfds:'ok', source:'mfds_report'});
     return `<div class="res-card">
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="res-rank ${i<3?'top3':''}">${i+1}</div>
@@ -562,13 +614,11 @@ function renderMfr(data){
     broker:'<span class="badge b-y">🔁 대행/유통</span>',
     unknown:'<span class="badge b-n">❓ 유형불명</span>'
   };
+  // 신규처(공장) 누적에는 실제 제조사(maker)만 승격 — 대행/유통은 오염 방지 위해 제외
+  pushAndRefresh(canonical, cands.filter(m=>m.entity_type==='maker').map(m=>({name:m.name, location:m.location, capability_score:m.capability_score, capability_note:m.capability_note, evidence_url:m.evidence_url, evidence_quote:m.evidence_quote, mfds:'unknown', source:'mfr'})));
+  cands.filter(m=>m.entity_type==='maker').forEach(m=>checkMfds(m.name, canonical));
   document.getElementById('c2-web').innerHTML=cands.map((m,i)=>{
     const scoreCls = m.capability_score>=70?'ch':m.capability_score>=40?'cm':'cl';
-    // 신규처(공장) 누적에는 실제 제조사(maker)만 승격 — 대행/유통은 오염 방지 위해 제외
-    if(m.entity_type==='maker'){
-      upsertFpEntry(canonical, {name:m.name, location:m.location, capability_score:m.capability_score, capability_note:m.capability_note, evidence_url:m.evidence_url, evidence_quote:m.evidence_quote, mfds:'unknown', source:'mfr'});
-      checkMfds(m.name, canonical);
-    }
     return `<div class="res-card" style="${m.entity_type==='broker'?'opacity:.72':''}">
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="res-rank ${i<3?'top3':''}">${i+1}</div>
@@ -581,13 +631,12 @@ function renderMfr(data){
       </div>
     </div>`;
   }).join('');
-  runC1Accum();
 }
 async function checkMfds(name, canonical){
   try{
     const data = await api('/api/mfds-check', {name});
-    upsertFpEntry(canonical, {name, mfds:data.status});
-    runC1Accum();
+    // 상태 갱신만 — 교차확인 카운트는 올리지 않음(bump=false)
+    pushAndRefresh(canonical, [{name, mfds:data.status}], false);
   }catch(e){ /* 조회 실패는 미확인 상태로 유지 */ }
 }
 
@@ -622,13 +671,12 @@ function renderSimilar(data){
   document.getElementById('c3-info').textContent=`${prods.length}건 (제조원 확인 ${withMfr}) · 쇼핑검색 근거`;
   const confMap={high:['✅ 제조원 라벨확인','ch'],mid:['🔶 제조원 추정','cm'],low:['❓ 불확실','cl']};
   const canonical=S.confirmed.canonical;
+  // 신규처(공장) 누적에는 실제 제조원(공장)만 승격 — 책판(브랜드/유통)은 승격하지 않음
+  const promote=prods.filter(p=>p.manufacturer && (p.manufacturer_confidence==='high'||p.manufacturer_confidence==='mid'));
+  pushAndRefresh(canonical, promote.map(p=>({name:p.manufacturer, evidence_quote:`유사제품 "${p.name}"의 제조원으로 확인됨: ${p.evidence_quote||''}`, evidence_url:p.evidence_url||null, mfds:'unknown', source:'similar'})));
+  promote.forEach(p=>checkMfds(p.manufacturer, canonical));
   document.getElementById('c3-body').innerHTML=prods.map((p,i)=>{
     const [cL,cC]=confMap[p.manufacturer_confidence]||confMap.low;
-    // 신규처(공장) 누적에는 실제 제조원(공장)만 승격 — 책판(브랜드/유통)은 승격하지 않음
-    if(p.manufacturer && (p.manufacturer_confidence==='high'||p.manufacturer_confidence==='mid')){
-      upsertFpEntry(canonical, {name:p.manufacturer, evidence_quote:`유사제품 "${p.name}"의 제조원으로 확인됨: ${p.evidence_quote||''}`, evidence_url:p.evidence_url||null, mfds:'unknown', source:'similar'});
-      checkMfds(p.manufacturer, canonical);
-    }
     const mfrLine = p.manufacturer
       ? `제조원(공장): <b style="color:var(--grn)">${p.manufacturer}</b> <span class="score-b ${cC}">${cL}</span>`
       : `제조원(공장): <b style="color:var(--txt3)">미상</b> <span class="score-b cl">책판만 확인</span>`;
@@ -640,7 +688,6 @@ function renderSimilar(data){
       ${p.evidence_url?`<div class="res-src"><a href="${p.evidence_url}" target="_blank">🔗 원문</a></div>`:''}
     </div>`;
   }).join('');
-  runC1Accum();
 }
 </script>
 </body>
