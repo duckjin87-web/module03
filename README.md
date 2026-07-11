@@ -24,6 +24,8 @@ CosmeDB — 화장품 OEM/ODM 소싱 검색엔진
 - `api/mfds-check.js` — 식약처(MFDS) 제조업 등록 여부 단건조회 (MnfSeqDetail01)
 - `api/mfds-report.js` — 식약처 기능성화장품 보고품목정보로 품목→제조원 역추출 (최상위 신뢰 소스, FtnltCosmRptPrdlstInfoService)
 - `api/vendors.js` — 팀 공유 신규처(제조원) 저장소. GET(canonical별 조회) / POST(업서트). 식별키: 사업자번호 > 식약처코드 > 정규화 업체명
+- `api/golden.js` — 골든셋(과거 성사 사례) 저장. GET/POST(add·delete)
+- `eval.html` — 엔진 평가 페이지. 골든셋(의뢰→실제 낙점 제조원)을 등록하고 전체 파이프라인을 돌려 Hit rate / Hit@5 / 평균 Recall / 평균 순위를 측정. 검색엔진 화면 우상단 🎯 평가 링크로 진입
 - `api/_kv.js` — Upstash Redis(Vercel KV) REST 헬퍼 (미구성 시 우아하게 비활성화)
 
 ### 팀 공유 저장소 (Upstash Redis / Vercel KV)
