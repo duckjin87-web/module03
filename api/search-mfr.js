@@ -11,10 +11,10 @@ const SYS = `당신은 화장품 OEM/ODM 제조업체 소싱 전문가입니다.
 - "unknown": 스니펫만으로는 제조 여부 판단 불가
 네이버 상위에는 대행사/브로커가 많으니 광고성·중개성 문구("소싱대행","수입유통","견적문의 대행" 등)는 broker로 분류하세요.
 
-각 후보에 대해 제공된 핵심설비/공정 키워드와 스니펫 내용이 얼마나 부합하는지 capability_score(0~100)로 평가하고,
-반드시 그 후보를 언급한 검색결과의 실제 URL을 evidence_url로, 관련 문구를 evidence_quote로 그대로 인용하세요.
+각 후보에 대해 제공된 핵심설비/공정 키워드와 스니펫 내용이 얼마나 부합하는지 capability_score(0~100)로 평가하세요.
+evidence_idx에는 그 후보를 언급한 검색결과의 번호(정수)를 넣으세요. URL은 절대 직접 쓰지 마세요.
 반드시 아래 JSON만 응답 (마크다운 금지):
-{"candidates":[{"name":"업체명","entity_type":"maker/broker/unknown","capability_score":0,"capability_note":"부합 판단 근거 1줄","evidence_url":"검색결과의 실제 URL","evidence_quote":"검색결과 스니펫에서 인용한 문구","location":"언급되어 있으면 소재지, 없으면 null"}]}
+{"candidates":[{"name":"업체명","entity_type":"maker/broker/unknown","capability_score":0,"capability_note":"부합 판단 근거 1줄","evidence_idx":1,"evidence_quote":"검색결과 스니펫에서 인용한 문구","location":"언급되어 있으면 소재지, 없으면 null"}]}
 검색 결과에서 회사를 전혀 찾을 수 없으면 candidates를 빈 배열로 반환하세요.`;
 
 module.exports = async (req, res) => {
@@ -43,11 +43,16 @@ module.exports = async (req, res) => {
     const seen = new Set();
     results = results.filter(r => { if (seen.has(r.link)) return false; seen.add(r.link); return true; }).slice(0, 24);
 
-    const userMsg = `타겟 유형: ${canonical}\n핵심 설비/공정 키워드: ${key_equipment.join(', ') || '없음'}\n\n검색 결과 목록:\n${results.map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.link}\n스니펫: ${r.snippet}`).join('\n\n')}`;
+    const userMsg = `타겟 유형: ${canonical}\n핵심 설비/공정 키워드: ${key_equipment.join(', ') || '없음'}\n\n검색 결과 목록:\n${results.map((r, i) => `[${i + 1}] ${r.title}\n스니펫: ${r.snippet}`).join('\n\n')}`;
     const raw = await callClaude({ system: SYS, user: userMsg, maxTokens: 1400 });
     const parsed = parseJsonLoose(raw);
     if (!parsed) return res.status(502).json({ error: 'PARSE_FAILED', raw });
-    return res.status(200).json(parsed);
+    // 인용 인덱스 → 실제 URL은 서버가 부착 (모델의 URL 환각 원천 차단)
+    const candidates = (parsed.candidates || []).map(c => ({
+      ...c,
+      evidence_url: (c.evidence_idx >= 1 && c.evidence_idx <= results.length) ? results[c.evidence_idx - 1].link : null,
+    }));
+    return res.status(200).json({ candidates });
   } catch (e) {
     return res.status(502).json({ error: e.message });
   }

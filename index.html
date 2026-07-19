@@ -601,17 +601,17 @@ let _fpEntries=[];
 async function runC1Accum(){
   const canonical=S.confirmed?.canonical||S.cls?.canonical;
   if(!canonical) return;
-  let entries;
-  if(_shared===true){
-    try{
-      const r=await fetch(`${API_BASE}/api/vendors?canonical=${encodeURIComponent(canonical)}`);
-      const d=await r.json();
-      if(d.configured){ entries=d.vendors||[]; }
-      else { _shared=false; entries=getFpEntriesLocal(canonical); }
-    }catch(e){ entries=getFpEntriesLocal(canonical); }
-  } else {
-    entries=getFpEntriesLocal(canonical);
-  }
+  let entries=[], seeds=[];
+  try{
+    const r=await fetch(`${API_BASE}/api/vendors?canonical=${encodeURIComponent(canonical)}`);
+    const d=await r.json();
+    seeds=d.seeds||[];
+    if(d.configured){ _shared=true; entries=d.vendors||[]; }
+    else { _shared=false; entries=getFpEntriesLocal(canonical); }
+  }catch(e){ _shared=false; entries=getFpEntriesLocal(canonical); }
+  // 시드 벤더팩(공개 근거 확인 업체)을 identity 기준으로 병합 — 이미 발굴된 업체는 중복 추가 안 함
+  const have=new Set(entries.map(e=>e.identity||_identity(e)));
+  entries=[...entries, ...seeds.filter(s=>!have.has(s.identity||_identity(s)))];
   entries=entries.slice().sort((a,b)=>(b.confirmedCount||0)-(a.confirmedCount||0));
   _fpEntries=entries;
   document.getElementById('c1-cnt').textContent=_fpEntries.length;
@@ -630,6 +630,7 @@ async function runC1Accum(){
     const srcB = e.source==='manual' ? '<span class="badge b-y">📝 제보</span>'
       : e.source==='similar' ? '<span class="badge b-p">🛒 유사제품</span>'
       : e.source==='mfds_report' ? '<span class="badge b-g">🟢 식약처 품목보고</span>'
+      : e.source==='seed' ? '<span class="badge b-g">🌱 시드(공개근거)</span>'
       : '<span class="badge b-p">🏭 업체검색</span>';
     const crossB = (e.confirmedCount||1)>1 ? `<span class="badge b-y">✅ ${e.confirmedCount}회 교차확인</span>` : '';
     return `<div class="fc-card" onclick="openEntryPanel(${i})">
@@ -674,7 +675,7 @@ function openEntryPanel(i){
       <div class="sp-sec-hd">🎯 신뢰도</div>
       <div class="sp-kv">
         <div class="sp-kvi"><div class="sp-kv-lbl">교차확인</div><div class="sp-kv-val tnum">${e.confirmedCount||1}회</div></div>
-        <div class="sp-kvi"><div class="sp-kv-lbl">출처</div><div class="sp-kv-val" style="font-size:10.5px">${e.source==='manual'?'직접 제보':e.source==='similar'?'유사제품 추출':e.source==='mfds_report'?'식약처 품목보고':'업체 검색'}</div></div>
+        <div class="sp-kvi"><div class="sp-kv-lbl">출처</div><div class="sp-kv-val" style="font-size:10.5px">${e.source==='manual'?'직접 제보':e.source==='similar'?'유사제품 추출':e.source==='mfds_report'?'식약처 품목보고':e.source==='seed'?'시드(공개근거)':'업체 검색'}</div></div>
         <div class="sp-kvi"><div class="sp-kv-lbl">식약처</div><div class="sp-kv-val" style="font-size:10.5px">${e.mfds==='ok'?'🟢 확인':e.mfds==='notfound'?'⚪ 미등록':'미확인'}</div></div>
         <div class="sp-kvi"><div class="sp-kv-lbl">능력점수</div><div class="sp-kv-val tnum" style="font-size:10.5px">${e.capability_score!=null?e.capability_score:'—'}</div></div>
       </div>

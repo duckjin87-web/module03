@@ -12,15 +12,18 @@ CosmeDB — 화장품 OEM/ODM 소싱 검색엔진
    - `MFDS_KEY` (data.go.kr 일반 인증키 — 아래 두 API에 모두 "활용신청" 되어 있어야 함)
    - `MFDS_REPORT_KEY` (선택 — 품목보고 API용 키를 따로 쓸 경우. 없으면 `MFDS_KEY`를 재사용)
    - `KV_REST_API_URL`, `KV_REST_API_TOKEN` (선택 — 팀 공유 신규처 저장소. Vercel Marketplace에서 Upstash Redis 연결 시 자동 주입됨. 없으면 브라우저 localStorage 폴백으로 동작)
+   - `CLAUDE_MODEL` (선택 — 백엔드가 쓸 Claude 모델 ID. 미설정 시 claude-sonnet-4-20250514. 상위 모델로 교체 시 여기만 변경)
 3. 재배포 후 `index.html`이 같은 도메인의 `/api/*` 함수를 호출합니다. API를 다른 도메인에 올렸다면 페이지 우측 상단 ⚙ 설정에서 API Base URL을 지정하세요.
 
 ## 구조
 
 - `index.html` — 프론트엔드 (분류 확인 → 근거기반 검색 → 결과/신뢰도 표시 → RFQ 생성)
   - 📋 RFQ 생성: 검색으로 확인 불가한 항목(MOQ/단가/납기/capacity/인증)을 공장 발송용 견적요청서로 자동 생성. 타겟 시장(한국/중국/미국/EU/할랄/비건) 선택 시 해당 인증 질의가 자동 포함. 업체 상세 패널에서는 해당 업체 수신용으로 생성.
-- `api/classify.js` — 1단계 유형 분류 (Claude)
+- `api/classify.js` — 1단계 유형 분류: 정적 taxonomy 우선(즉시·무비용·결정적), 미등재 표현만 Claude 폴백
+- `api/_taxonomy.js` — 화장품 유형 정적 분류체계(대/중분류·동의어·설비·검색쿼리). 항목 추가로 확장
+- `api/_seed.js` — 시드 벤더팩. 공개 근거 URL이 확인된 업체만 등재(환각 시드 금지 원칙)
 - `api/search-mfr.js` — 화장품 제조업체 검색 (네이버 검색 + Claude 종합)
-- `api/search-similar.js` — 국내 유사제품 검색 (네이버 쇼핑 + Claude 추출)
+- `api/search-similar.js` — 국내 유사제품 검색 3단 파이프라인: 네이버 쇼핑 → 상세페이지 실제 fetch(법정표기 추출) → 제조원 미상 제품 2-hop 재검색. 근거 URL은 인용 인덱스 방식(모델은 번호만, URL은 서버가 부착)
 - `api/mfds-check.js` — 식약처(MFDS) 제조업 등록 여부 단건조회 (MnfSeqDetail01)
 - `api/mfds-report.js` — 식약처 기능성화장품 보고품목정보로 품목→제조원 역추출 (최상위 신뢰 소스, FtnltCosmRptPrdlstInfoService)
 - `api/vendors.js` — 팀 공유 신규처(제조원) 저장소. GET(canonical별 조회) / POST(업서트). 식별키: 사업자번호 > 식약처코드 > 정규화 업체명

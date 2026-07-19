@@ -1,4 +1,5 @@
 const { callClaude, parseJsonLoose, setCors } = require('./_lib');
+const { matchTaxonomy } = require('./_taxonomy');
 
 const SYS = `당신은 한국 화장품 산업의 제품 유형 분류 전문가입니다.
 사용자가 입력한 신규 제품 유형 또는 타겟 제품 정보를 분석해, 아래 JSON 스키마로만 응답하세요 (마크다운 금지).
@@ -23,6 +24,12 @@ module.exports = async (req, res) => {
   try {
     const { input, inputType } = req.body || {};
     if (!input || !input.trim()) return res.status(400).json({ error: 'INPUT_REQUIRED' });
+
+    // 정적 taxonomy 우선 — 사전에 있는 유형은 LLM 없이 즉시 분류 (신규유형 텍스트 입력만; 타겟제품은 LLM으로)
+    if (inputType !== 'target_product') {
+      const hit = matchTaxonomy(input);
+      if (hit) return res.status(200).json(hit);
+    }
 
     const userMsg = `입력 유형: ${inputType === 'target_product' ? '타겟 제품(제품명 또는 URL/상세정보)' : '신규 제품 유형 텍스트'}\n입력값: ${input}\n\n위 입력을 화장품 유형 분류 스키마에 따라 분류해주세요.`;
     const raw = await callClaude({ system: SYS, user: userMsg, maxTokens: 800 });

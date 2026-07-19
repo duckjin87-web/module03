@@ -1,5 +1,6 @@
 const { setCors } = require('./_lib');
 const { redis, hgetallValues } = require('./_kv');
+const { getSeeds } = require('./_seed');
 
 /*
  팀 공유 신규처(제조원) 저장소.
@@ -32,10 +33,13 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const canonical = req.query.canonical;
       if (!canonical) return res.status(400).json({ error: 'CANONICAL_REQUIRED' });
+      // 시드 벤더팩(공개 근거 확인 업체)은 저장소 구성 여부와 무관하게 제공 — 콜드스타트 해소
+      const seeds = getSeeds(canonical).map(s => ({ ...s, identity: identityKey(s), confirmedCount: 1 }));
       const { configured, result } = await redis(['HGETALL', KEY(canonical)]);
-      if (!configured) return res.status(200).json({ configured: false, vendors: [] });
+      if (!configured) return res.status(200).json({ configured: false, vendors: [], seeds });
       const vendors = hgetallValues(result).map(v => { try { return JSON.parse(v); } catch (e) { return null; } }).filter(Boolean);
-      return res.status(200).json({ configured: true, vendors });
+      const have = new Set(vendors.map(v => v.identity || identityKey(v)));
+      return res.status(200).json({ configured: true, vendors, seeds: seeds.filter(s => !have.has(s.identity)) });
     }
 
     if (req.method === 'POST') {
