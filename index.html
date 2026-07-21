@@ -443,11 +443,20 @@ function updateApiBase(v){
 function toggleSettings(){ document.getElementById('settings-pop').classList.toggle('show'); }
 
 async function api(path, body){
-  const resp = await fetch(`${API_BASE}${path}`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body||{})
-  });
-  const data = await resp.json().catch(()=>({error:'INVALID_RESPONSE'}));
+  let resp;
+  try{
+    resp = await fetch(`${API_BASE}${path}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body||{})
+    });
+  }catch(e){ throw new Error('백엔드 연결 실패 (네트워크/CORS) — ⚙ 설정의 API 주소 확인'); }
+  const ct = resp.headers.get('content-type')||'';
+  if(!ct.includes('json')){
+    // 응답이 JSON이 아님 = /api 함수가 실행되지 않고 HTML(앱/404)이 돌아온 것
+    throw new Error(`백엔드(/api) 미배포 — 서버리스 함수가 실행되지 않습니다 (HTTP ${resp.status}, 정적 호스팅이면 /api 동작 안 함). Vercel 배포를 확인하세요`);
+  }
+  const data = await resp.json().catch(()=>null);
+  if(!data) throw new Error('응답 파싱 실패');
   if(!resp.ok) throw new Error(data.error || `HTTP_${resp.status}`);
   return data;
 }
