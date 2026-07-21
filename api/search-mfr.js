@@ -23,7 +23,7 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
 
   try {
-    const { canonical, key_equipment = [], search_keywords = [] } = req.body || {};
+    const { canonical, key_equipment = [], search_keywords = [], feedback = '' } = req.body || {};
     if (!canonical) return res.status(400).json({ error: 'CANONICAL_REQUIRED' });
 
     const queries = (search_keywords.length ? search_keywords : [canonical]).slice(0, 4)
@@ -43,7 +43,7 @@ module.exports = async (req, res) => {
     const seen = new Set();
     results = results.filter(r => { if (seen.has(r.link)) return false; seen.add(r.link); return true; }).slice(0, 24);
 
-    const userMsg = `타겟 유형: ${canonical}\n핵심 설비/공정 키워드: ${key_equipment.join(', ') || '없음'}\n\n검색 결과 목록:\n${results.map((r, i) => `[${i + 1}] ${r.title}\n스니펫: ${r.snippet}`).join('\n\n')}`;
+    const userMsg = `타겟 유형: ${canonical}\n핵심 설비/공정 키워드: ${key_equipment.join(', ') || '없음'}${feedback ? `\n\n[검수 피드백 — 반드시 반영]\n${feedback}` : ''}\n\n검색 결과 목록:\n${results.map((r, i) => `[${i + 1}] ${r.title}\n스니펫: ${r.snippet}`).join('\n\n')}`;
     const raw = await callClaude({ system: SYS, user: userMsg, maxTokens: 1400 });
     const parsed = parseJsonLoose(raw);
     if (!parsed) return res.status(502).json({ error: 'PARSE_FAILED', raw });

@@ -24,6 +24,7 @@ CosmeDB — 화장품 OEM/ODM 소싱 검색엔진
 - `api/_seed.js` — 시드 벤더팩. 공개 근거 URL이 확인된 업체만 등재(환각 시드 금지 원칙)
 - `api/search-mfr.js` — 화장품 제조업체 검색 (네이버 검색 + Claude 종합)
 - `api/search-similar.js` — 국내 유사제품 검색 3단 파이프라인: 네이버 쇼핑 → 상세페이지 실제 fetch(법정표기 추출) → 제조원 미상 제품 2-hop 재검색. 근거 URL은 인용 인덱스 방식(모델은 번호만, URL은 서버가 부착)
+- `api/review.js` — 검수자(Reviewer). 수집·추적 초안을 채점(confidence 0~100)하고 약한 단계(collect/trace)에 피드백. 프론트가 이 피드백으로 최대 3라운드 자기교정. 신뢰도는 60%까지도 '잠정'으로 노출(결과 비은닉)
 - `api/mfds-check.js` — 식약처(MFDS) 제조업 등록 여부 단건조회 (MnfSeqDetail01)
 - `api/mfds-report.js` — 식약처 기능성화장품 보고품목정보로 품목→제조원 역추출 (최상위 신뢰 소스, FtnltCosmRptPrdlstInfoService)
 - `api/vendors.js` — 팀 공유 신규처(제조원) 저장소. GET(canonical별 조회) / POST(업서트). 식별키: 사업자번호 > 식약처코드 > 정규화 업체명

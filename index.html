@@ -119,6 +119,19 @@ a{color:var(--web)}
 .cls-sum .re{margin-left:auto;font-size:10px;font-weight:700;color:var(--ink2);background:var(--card);border:1px solid var(--line2);border-radius:999px;padding:5px 13px}
 .cls-sum .re:hover{border-color:var(--accent);color:var(--accent)}
 
+/* 검수 진행 바 */
+.review-strip{flex-shrink:0;display:none;align-items:center;gap:10px;padding:8px 18px;background:var(--fill);border-bottom:1px solid var(--line);font-size:11px;flex-wrap:wrap}
+.review-strip.show{display:flex}
+.review-strip .rv-round{font-weight:700;color:var(--ink2)}
+.review-strip .rv-badge{font-size:10px;font-weight:800;padding:3px 10px;border-radius:999px}
+.review-strip .rv-weak{color:var(--ink3);font-size:10px}
+.review-strip .spin{margin:0 2px 0 0}
+/* grade 배지 */
+.grade{font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:5px;white-space:nowrap}
+.grade.g1{background:var(--official-bg);color:var(--official)}
+.grade.g2{background:var(--web-bg);color:var(--web)}
+.grade.g3{background:var(--warn-bg);color:var(--warn)}
+
 /* ── main 3-col ── */
 .main{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1.18fr 1fr;transition:margin-right .25s ease}
 .main.panel-open{margin-right:var(--panel)}
@@ -283,6 +296,8 @@ a{color:var(--web)}
 <div class="cls-region" id="cls-region">
   <div class="cls-hint">🧭 <b>제품유형 또는 타겟제품</b>을 입력하고 [분류 분석]을 누르면, 유형을 먼저 분류·확정한 뒤 세 소스로 동시에 검색합니다.</div>
 </div>
+
+<div class="review-strip" id="review-strip"></div>
 
 <div class="main" id="main">
 
@@ -534,8 +549,52 @@ async function confirmClassification(){
   renderClsSummary();
   await initSharedMode(canonical);
   runC1Accum();
-  runSearchMfr();
-  runSearchSimilar();
+  runPipeline();
+}
+
+/* ════════════════════════════════════════
+   검수 루프 오케스트레이터 — 수집→추적→검수 채점→약한 단계 재작업 (최대 3라운드)
+   신뢰도는 60%까지도 '잠정'으로 노출(결과를 숨기지 않음).
+════════════════════════════════════════ */
+async function runPipeline(){
+  const strip=document.getElementById('review-strip');
+  strip.classList.add('show');
+  let feedback='';
+  for(let round=1; round<=3; round++){
+    setReviewRunning(round);
+    if(round===1){
+      await Promise.all([runSearchMfr(''), runSearchSimilar('')]);
+    } else {
+      // 재작업 라운드 — 검수 피드백을 수집(유사제품)·추적(웹 제조사)에 반영
+      await Promise.all([runNaverMfr(feedback), runSearchSimilar(feedback)]);
+    }
+    let review=null;
+    try{
+      const draft={ canonical:S.confirmed.canonical, products:_c3products,
+        candidates:_fpEntries.map(e=>({name:e.name,source:e.source,mfds:e.mfds})) };
+      review=await api('/api/review',{draft, round});
+    }catch(e){}
+    setReviewDone(round, review);
+    if(!review) break;
+    if((review.confidence||0)>=90 && review.verdict==='승인') break;
+    if(round===3) break;
+    feedback=[(review.weak_points||[]).join(' / '), review.feedback].filter(Boolean).join('\n');
+  }
+}
+function setReviewRunning(round){
+  document.getElementById('review-strip').innerHTML=`<span class="spin"></span><span class="rv-round">검수 ${round}차 진행 중</span><span class="rv-weak">수집·추적·교차검증 중...</span>`;
+}
+function setReviewDone(round, review){
+  const strip=document.getElementById('review-strip');
+  if(!review){ strip.innerHTML=`<span class="rv-round">검수 ${round}차</span><span class="rv-weak">검수 판독 실패 — 결과는 그대로 표시됩니다</span>`; return; }
+  const c=review.confidence||0;
+  const [label,bg,fg]= c>=90?['✅ 승인','var(--official-bg)','var(--official)']
+    : c>=60?['🟡 잠정','var(--warn-bg)','var(--warn)']
+    : ['⚪ 낮음(참고용)','var(--fill2)','var(--ink3)'];
+  const weak=(review.weak_points||[]).slice(0,2).join(' · ');
+  strip.innerHTML=`<span class="rv-round">검수 ${round}차</span>`+
+    `<span class="rv-badge" style="background:${bg};color:${fg}">${label} ${c}%</span>`+
+    (weak?`<span class="rv-weak">보완점: ${weak}</span>`:'');
 }
 
 /* ════════════════════════════════════════
@@ -699,7 +758,7 @@ function updateC2Header(){
   document.getElementById('c2-cnt').textContent=_c2n.official+_c2n.web;
   document.getElementById('c2-info').textContent=`식약처 품목보고 ${_c2n.official} · 웹검색 ${_c2n.web}`;
 }
-async function runSearchMfr(){
+async function runSearchMfr(feedback=''){
   _c2n={official:0,web:0};
   document.getElementById('c2-api-warn').classList.remove('show');
   document.getElementById('c2-body').innerHTML=`
@@ -708,8 +767,7 @@ async function runSearchMfr(){
     <div class="sec-h web">🔎 웹 검색 · 네이버 보조<span class="n" id="c2-web-n">…</span></div>
     <div id="c2-web"><div class="ai-load"><span class="spin"></span> 네이버 검색 중...</div></div>`;
   document.getElementById('c2-cnt').textContent='…';
-  runMfdsReport();
-  runNaverMfr();
+  await Promise.all([runMfdsReport(), runNaverMfr(feedback)]);
 }
 async function runMfdsReport(){
   const c=S.confirmed;
@@ -745,10 +803,10 @@ function renderMfdsReport(data){
   }).join('');
   runC1Accum();
 }
-async function runNaverMfr(){
+async function runNaverMfr(feedback=''){
   const c=S.confirmed;
   try{
-    const data = await api('/api/search-mfr', { canonical:c.canonical, key_equipment:c.key_equipment, search_keywords:c.search_keywords });
+    const data = await api('/api/search-mfr', { canonical:c.canonical, key_equipment:c.key_equipment, search_keywords:c.search_keywords, feedback });
     renderMfr(data);
   }catch(e){
     document.getElementById('c2-web').innerHTML=`<div style="padding:12px 13px;color:var(--warn);font-size:11px">
@@ -796,14 +854,15 @@ async function checkMfds(name, canonical){
 /* ════════════════════════════════════════
    3단계: 국내 유사제품 검색 (근거기반)
 ════════════════════════════════════════ */
-async function runSearchSimilar(){
+let _c3products=[];
+async function runSearchSimilar(feedback=''){
   const c=S.confirmed;
   document.getElementById('c3-api-warn').classList.remove('show');
-  document.getElementById('c3-body').innerHTML=`<div class="ai-load"><span class="spin"></span> 실제 쇼핑검색 수행 중...
-    <div class="ai-steps">① 네이버 쇼핑검색 · ② 제품 스니펫 분석 · ③ 라벨상 제조원 추출</div></div>`;
+  document.getElementById('c3-body').innerHTML=`<div class="ai-load"><span class="spin"></span> 채널 역검색 수행 중...
+    <div class="ai-steps">① 올리브영·화해·쇼핑·블로그 역검색 · ② 상세페이지 법정표기 추출 · ③ 제조원 2-hop 역추적</div></div>`;
   document.getElementById('c3-cnt').textContent='…';
   try{
-    const data = await api('/api/search-similar', { canonical:c.canonical, search_keywords:c.search_keywords });
+    const data = await api('/api/search-similar', { canonical:c.canonical, search_keywords:c.search_keywords, feedback });
     renderSimilar(data);
   }catch(e){
     document.getElementById('c3-api-warn').classList.add('show');
@@ -814,6 +873,7 @@ async function runSearchSimilar(){
 }
 function renderSimilar(data){
   const prods=(data.products||[]);
+  _c3products=prods;
   document.getElementById('c3-cnt').textContent=prods.length;
   if(!prods.length){
     document.getElementById('c3-info').textContent='0건 · 시중 유사제품 미발견';
@@ -821,20 +881,23 @@ function renderSimilar(data){
     return;
   }
   const withMfr=prods.filter(p=>p.manufacturer).length;
-  document.getElementById('c3-info').textContent=`${prods.length}건 (제조원 확인 ${withMfr}) · 쇼핑검색 근거`;
+  document.getElementById('c3-info').textContent=`${prods.length}건 추천 (제조원 확인 ${withMfr}) · 채널 역검색`;
   const confMap={high:['✅ 제조원 라벨확인','ch'],mid:['🔶 제조원 추정','cm'],low:['❓ 불확실','cl']};
+  const gradeMap={'확정':['확정','g1'],'유사':['유사','g2'],'의심':['의심','g3']};
   const canonical=S.confirmed.canonical;
+  // 제조원 확인된 것만 신규처 누적으로 승격 (제품 자체는 미확인이어도 목록엔 남김)
   const promote=prods.filter(p=>p.manufacturer && (p.manufacturer_confidence==='high'||p.manufacturer_confidence==='mid'));
-  pushAndRefresh(canonical, promote.map(p=>({name:p.manufacturer, evidence_quote:`유사제품 "${p.name}"의 제조원으로 확인됨: ${p.evidence_quote||''}`, evidence_url:p.evidence_url||null, mfds:'unknown', source:'similar'})));
+  pushAndRefresh(canonical, promote.map(p=>({name:p.manufacturer, evidence_quote:`유사제품 "${p.product||p.name}"의 제조원으로 확인됨: ${p.evidence_quote||''}`, evidence_url:p.evidence_url||null, mfds:'unknown', source:'similar'})));
   promote.forEach(p=>checkMfds(p.manufacturer, canonical));
   document.getElementById('c3-body').innerHTML=prods.map((p,i)=>{
     const [cL,cC]=confMap[p.manufacturer_confidence]||confMap.low;
+    const [gL,gC]=gradeMap[p.grade]||gradeMap['유사'];
     const mfrLine = p.manufacturer
       ? `제조원(공장): <b style="color:var(--official)">${p.manufacturer}</b> <span class="score-b ${cC}">${cL}</span>`
-      : `제조원(공장): <b style="color:var(--ink3)">미상</b> <span class="score-b cl">책판만 확인</span>`;
+      : `제조원(공장): <b style="color:var(--ink3)">미확인</b> <span class="score-b cl">추천 유지 · 확인 필요</span>`;
     return `<div class="res-card">
-      <div class="res-name">${p.name}</div>
-      <div class="res-meta">브랜드: ${p.brand||'—'} · 책판: ${p.seller||'—'}</div>
+      <div class="res-name"><span class="grade ${gC}">${gL}</span> ${p.product||p.name||'—'}</div>
+      <div class="res-meta">브랜드: ${p.brand||'—'} · 책판: ${p.seller||'—'}${p.channel?` · <span style="color:var(--ink3)">${p.channel}</span>`:''}</div>
       <div class="res-meta">${mfrLine}</div>
       ${p.evidence_quote?`<div class="res-quote">"${p.evidence_quote}"</div>`:''}
       ${p.evidence_url?`<div class="res-src"><a href="${p.evidence_url}" target="_blank">🔗 원문</a></div>`:''}

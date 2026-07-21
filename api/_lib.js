@@ -21,12 +21,33 @@ async function callClaude({ system, user, maxTokens = 1200 }) {
   return text;
 }
 
+// 견고한 JSON 파싱 — 마크다운/군더더기 제거 + 토큰한도로 잘린 JSON을 괄호균형 복원해 살림.
+// 정상 파싱이 될 땐 개입하지 않고, 실패할 때만 복구한다(부작용 없음, 순수 이득).
 function parseJsonLoose(text) {
-  try {
-    return JSON.parse(text.replace(/```json|```/g, '').trim());
-  } catch (e) {
-    return null;
+  if (!text) return null;
+  let s = String(text).replace(/```json/gi, '').replace(/```/g, '').trim();
+  const start = s.indexOf('{');
+  if (start === -1) return null;
+  s = s.slice(start);
+  // 1) 첫 { ~ 마지막 } 로 정상 파싱 시도
+  const lastClose = s.lastIndexOf('}');
+  if (lastClose !== -1) {
+    try { return JSON.parse(s.slice(0, lastClose + 1)); } catch (_) {}
   }
+  // 2) 잘린 JSON 복구: 끝의 어정쩡한 토큰 제거 → 안 닫힌 따옴표 닫기 → 부족한 괄호 순서대로 채우기
+  let r = s.replace(/[,{\[:]\s*$/, '');
+  if (((r.match(/"/g) || []).length) % 2 === 1) r += '"';
+  const stack = []; let inStr = false;
+  for (let i = 0; i < r.length; i++) {
+    const ch = r[i];
+    if (ch === '"' && r[i - 1] !== '\\') inStr = !inStr;
+    if (inStr) continue;
+    if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  r = r.replace(/,\s*$/, '');
+  while (stack.length) r += (stack.pop() === '{' ? '}' : ']');
+  try { return JSON.parse(r); } catch (_) { return null; }
 }
 
 async function naverSearch({ type, query, display = 10 }) {
